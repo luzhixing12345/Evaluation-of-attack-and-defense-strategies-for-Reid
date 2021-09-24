@@ -13,9 +13,9 @@ from .backbones import (
 from .heads import (
     REID_HEADS_REGISTRY,
     build_heads,
-    build_logits_heads,
+    build_train_heads,
     EmbeddingHead,
-    training_head
+    TrainingHead
 )
 from .meta_arch import (
     build_model,

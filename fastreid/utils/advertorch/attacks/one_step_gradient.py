@@ -35,7 +35,7 @@ class GradientSignAttack(Attack, LabelMixin):
     """
 
     def __init__(self, predict, loss_fn=None, eps=0.3, clip_min=0.,
-                 clip_max=255., targeted=False):
+                 clip_max=1., targeted=False):
         """
         Create an instance of the GradientSignAttack.
         """
@@ -62,21 +62,14 @@ class GradientSignAttack(Attack, LabelMixin):
 
         x, y = self._verify_and_process_inputs(x, y)
         xadv = x.requires_grad_()
-        neck_feat = self.predict(xadv)
-        logits = F.linear(neck_feat, self.predict.heads.weight)
-        if self.predict.heads.cls_layer.__class__.__name__ == 'Linear':
-            logits = F.linear(neck_feat, self.predict.heads.weight)
-        else:
-            logits = F.linear(F.normalize(neck_feat), F.normalize(self.predict.heads.weight))
-
-        cls_outputs = self.predict.heads.cls_layer(logits, y)
-        loss = self.loss_fn(cls_outputs,y)
+        logits = self.predict(xadv)
+        loss = self.loss_fn(logits,y)
         if self.targeted:
             loss = -loss
         loss.backward()
-        grad_sign = xadv.grad.detach().sign()
+        grad_sign = xadv.grad.detach().sign()*255
 
-        xadv = xadv + batch_multiply(self.eps, grad_sign*255)
+        xadv = xadv + batch_multiply(self.eps, grad_sign)
  
         xadv = clamp(xadv, self.clip_min, self.clip_max)
 
@@ -100,7 +93,7 @@ class GradientAttack(Attack, LabelMixin):
     """
 
     def __init__(self, predict, loss_fn=None, eps=0.3,
-                 clip_min=0., clip_max=1., targeted=False):
+                 clip_min=0., clip_max=255., targeted=False):
         """
         Create an instance of the GradientAttack.
         """
@@ -132,14 +125,11 @@ class GradientAttack(Attack, LabelMixin):
         if self.targeted:
             loss = -loss
         loss.backward()
-        grad = normalize_by_pnorm(xadv.grad)
+        grad = normalize_by_pnorm(xadv.grad)*255
         xadv = xadv + batch_multiply(self.eps, grad)
         xadv = clamp(xadv, self.clip_min, self.clip_max)
 
-        return {
-            'datas':xadv.detach(),
-            'targets':y,
-        }
+        return xadv.detach()
 
 
 FGM = GradientAttack

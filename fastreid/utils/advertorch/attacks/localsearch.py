@@ -36,7 +36,7 @@ class SinglePixelAttack(Attack, LabelMixin):
     """
 
     def __init__(self, predict, max_pixels=100, clip_min=0.,
-                 loss_fn=None, clip_max=1., comply_with_foolbox=False,
+                 loss_fn=None, clip_max=255., comply_with_foolbox=False,
                  targeted=False):
         super(SinglePixelAttack, self).__init__(
             predict=predict, loss_fn=None,
@@ -59,8 +59,8 @@ class SinglePixelAttack(Attack, LabelMixin):
         pixels = pixels.to(x.device)
         pixels = pixels[:self.max_pixels]
         for ii in range(self.max_pixels):
-            row = pixels[ii] % x.shape[2]
-            col = pixels[ii] // x.shape[2]
+            row = pixels[ii] // x.shape[2]
+            col = pixels[ii] % x.shape[2]
             for val in [self.clip_min, self.clip_max]:
                 adv = replicate_input(x)
                 for mm in range(x.shape[0]):

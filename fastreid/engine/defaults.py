@@ -9,7 +9,9 @@ since they are meant to represent the "common default behavior" people need in t
 """
 
 import argparse
-from fastreid.modeling.meta_arch.build import build_model_for_attack,build_model_for_defense
+
+from torch import storage
+from fastreid.modeling.meta_arch.build import build_model_for_pretrain,build_model_for_attack
 import logging
 import os
 import sys
@@ -51,8 +53,11 @@ def default_argument_parser():
         help="whether to attempt to resume from the checkpoint directory",
     )
     parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
-    parser.add_argument("--attack-by",action="store_true", help="attack the model")
-    parser.add_argument("--defend-by",action="store_true", help="defend the model")
+    parser.add_argument("--attack",action="store_true", help="attack the model")
+    parser.add_argument("--C",action="store_true", help="using the classcification attack method")
+    parser.add_argument("--R",action="store_true", help="using the ranking attack method")
+    parser.add_argument("--defense",action="store_true", help="defend the model")
+    parser.add_argument("--query-train",action="store_true", help="whether train the query set")
 
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="total number of machines")
@@ -387,11 +392,20 @@ class DefaultTrainer(TrainerBase):
         Overwrite it if you'd like a different model.
         """
         model = build_model(cfg)
-        logger = logging.getLogger(__name__)
-        logger.info("Model:\n{}".format(model))
         return model
 
-    #调用攻击的baseline_for_attack
+    #训练query set
+    @classmethod
+    def build_model_for_pretrain(cls, cfg):
+        """
+        Returns:
+            torch.nn.Module:
+        It now calls :func:`fastreid.modeling.build_model`.
+        Overwrite it if you'd like a different model.
+        """
+        model = build_model_for_pretrain(cfg)
+        return model
+
     @classmethod
     def build_model_for_attack(cls, cfg):
         """
@@ -401,22 +415,6 @@ class DefaultTrainer(TrainerBase):
         Overwrite it if you'd like a different model.
         """
         model = build_model_for_attack(cfg)
-        logger = logging.getLogger(__name__)
-        logger.info("Model:\n{}".format(model))
-        return model
-
-    #调用防御的baseline_for_defense
-    @classmethod
-    def build_model_for_defense(cls, cfg):
-        """
-        Returns:
-            torch.nn.Module:
-        It now calls :func:`fastreid.modeling.build_model`.
-        Overwrite it if you'd like a different model.
-        """
-        model = build_model_for_defense(cfg)
-        logger = logging.getLogger(__name__)
-        logger.info("Model:\n{}".format(model))
         return model
 
 

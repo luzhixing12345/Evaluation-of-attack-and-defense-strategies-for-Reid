@@ -25,22 +25,22 @@ def build_model(cfg):
     model.to(torch.device(cfg.MODEL.DEVICE))
     return model
 
+def build_model_for_pretrain(cfg):
+    """
+    Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE_ATTACK``.
+    Note that it does not load any weights from ``cfg``.
+    """
+    meta_arch = cfg.MODEL.META_ARCHITECTURE_TRAIN
+    model = META_ARCH_REGISTRY.get(meta_arch)(cfg)
+    model.to(torch.device(cfg.MODEL.DEVICE))
+    return model
+
 def build_model_for_attack(cfg):
     """
     Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE_ATTACK``.
     Note that it does not load any weights from ``cfg``.
     """
     meta_arch = cfg.MODEL.META_ARCHITECTURE_ATTACK
-    model = META_ARCH_REGISTRY.get(meta_arch)(cfg)
-    model.to(torch.device(cfg.MODEL.DEVICE))
-    return model
-
-def build_model_for_defense(cfg):
-    """
-    Build the whole model architecture, defined by ``cfg.MODEL.META_ARCHITECTURE_DEFENSE``.
-    Note that it does not load any weights from ``cfg``.
-    """
-    meta_arch = cfg.MODEL.META_ARCHITECTURE_DEFENSE
     model = META_ARCH_REGISTRY.get(meta_arch)(cfg)
     model.to(torch.device(cfg.MODEL.DEVICE))
     return model

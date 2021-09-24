@@ -12,9 +12,9 @@ sys.path.append('.')
 from fastreid.config import get_cfg
 from fastreid.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import get_query_set,get_def_query_set, record
-from fastreid.utils.attack_patch import attack
-from fastreid.utils.defense_patch import defense
+from fastreid.utils.reid_patch import evaluate_misMatch, get_query_set, record,train_query_set,get_pure_result
+from fastreid.utils.attack_patch.attack_patch import attack_C,attack_R
+from fastreid.utils.defense_patch.defense_patch import defense
 import torch
 def setup(args):
     """
@@ -41,32 +41,66 @@ def main(args):
     #     cfg.MODEL.BACKBONE.PRETRAIN = False
     #     model = DefaultTrainer.build_model(cfg)
 
-    #     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+    #Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
 
-    #    res = DefaultTrainer.test(cfg, model)
+    #res = DefaultTrainer.test(cfg, model)
     # #     return res
 
     # trainer = DefaultTrainer(cfg)
 
     # trainer.resume_or_load(resume=args.resume)
     # trainer.train()
-    print('Start attack and defense.')
     query_set=get_query_set(cfg)
+    cfg.defrost()
+    cfg.MODEL.BACKBONE.PRETRAIN = False
+    
+    #保存的结果，默认值都为0
+    pure_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
+    adv_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
+    def_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
+    def_adv_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
 
-    if args.attack_by:
+    if args.query_train:
+        cfg = train_query_set(cfg,query_set)
+        #模型保存的位置在(./model/query_trained.pth)
+        print('finished the train for query set ')
+        print('---------------------------------------------')
+    
+    #注:已经预先在fastreid\config\defaults.py中定义了
+    # _C.MODEL.QUERYSET_TRAINED_WEIGHT = './model/query_trained.pth'
+    # _C.MODEL.TRAINSET_TRAINED_WEIGHT = "./model/pretrained.pth"
+    # _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/adv_trained.pth"
+    #三个位置为模型保存的位置
+
+    pure_result,std_model=get_pure_result(cfg,query_set)
+
+    if args.attack:
         print('start attack')
-        query_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_set.dataset.num_classes)
-        model = DefaultTrainer.build_model(query_cfg)  #启用baseline
-        Checkpointer(model).load(query_cfg.MODEL.WEIGHTS)  # load trained model
-        attack(query_cfg,model,query_set)
-        pure_result=DefaultTrainer.test(query_cfg, model)       #test用于测试原始的query与gallery合成的test_set
-        adv_result =DefaultTrainer.advtest(query_cfg, model)     #advtest用于测试adv_query与gallery合成的test_set
+        if args.C:#针对分类问题的攻击
+            query_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_set.dataset.num_classes)
+            model = DefaultTrainer.build_model_for_attack(query_cfg)  #启用baseline_for_query_train
+            Checkpointer(model).load(query_cfg.MODEL.QUERYSET_TRAINED_WEIGHT)  # load trained model
+            
+            attack_C(query_cfg,model,query_set)
 
-    if args.defend_by:
-        print('start defense')
-        def_adv_result =defense(cfg,query_set)
+            adv_result =DefaultTrainer.advtest(query_cfg, std_model)     #advtest用于测试adv_query与gallery合成的test_set
+            pure_misMatch = evaluate_misMatch(std_model,query_set)
+            pure_result['misMatch']=pure_misMatch
+            adv_misMatch =evaluate_misMatch(model,query_set)
+            adv_result['misMatch']=adv_misMatch
+        elif args.R:#针对排序问题的攻击
+            model = DefaultTrainer.build_model_for_attack(cfg)  #启用baseline_for_query_train
+            Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+            adv_result=attack_R(cfg,model,query_set)
+        else:
+            print('You must directly claim which type of the attack method ,please check in the USE.md to change your arguments')
+            raise
+    if args.defense:
+        #print('start defense')
+        def_result,def_adv_result =defense(cfg,query_set)
 
-    record(cfg,pure_result,adv_result,def_adv_result)
+
+    record(cfg,pure_result,adv_result,def_result,def_adv_result)
     print("You have finished the task !")
 
 

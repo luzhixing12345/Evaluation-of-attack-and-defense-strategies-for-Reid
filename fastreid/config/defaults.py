@@ -22,6 +22,8 @@ _C = CN()
 _C.MODEL = CN()
 _C.MODEL.DEVICE = "cuda"
 _C.MODEL.META_ARCHITECTURE = "Baseline"
+_C.MODEL.META_ARCHITECTURE_TRAIN = "Baseline_pretrain"
+_C.MODEL.META_ARCHITECTURE_ATTACK = "Baseline_attack"
 
 _C.MODEL.FREEZE_LAYERS = ['']
 
@@ -56,6 +58,7 @@ _C.MODEL.BACKBONE.PRETRAIN_PATH = ''
 # ---------------------------------------------------------------------------- #
 _C.MODEL.HEADS = CN()
 _C.MODEL.HEADS.NAME = "EmbeddingHead"
+_C.MODEL.HEADS.TRAIN = "TrainingHead"
 # Normalization method for the convolution layers.
 _C.MODEL.HEADS.NORM = "BN"
 # Number of identity
@@ -67,10 +70,10 @@ _C.MODEL.HEADS.WITH_BNNECK = False
 # Triplet feature using feature before(after) bnneck
 _C.MODEL.HEADS.NECK_FEAT = "before"  # options: before, after
 # Pooling layer type
-_C.MODEL.HEADS.POOL_LAYER = "GlobalAvgPool"
+_C.MODEL.HEADS.POOL_LAYER = "avgpool"
 
 # Classification layer type
-_C.MODEL.HEADS.CLS_LAYER = "Linear"  # ArcSoftmax" or "CircleSoftmax"
+_C.MODEL.HEADS.CLS_LAYER = "linear"  # ArcSoftmax" or "CircleSoftmax"
 
 # Margin and Scale for margin-based classification layer
 _C.MODEL.HEADS.MARGIN = 0.
@@ -117,10 +120,15 @@ _C.MODEL.LOSSES.COSFACE.SCALE = 1.0
 
 # Path to a checkpoint file to be loaded to the model. You can find available models in the model zoo.
 _C.MODEL.WEIGHTS = ""
+_C.MODEL.QUERYSET_TRAINED_WEIGHT = './model/query_trained.pth'
+_C.MODEL.TRAINSET_TRAINED_WEIGHT = "./model/pretrained.pth"
+_C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/adv_trained.pth"
+
 _C.MODEL.ATTACKMETHOD=""
 _C.MODEL.DEFENSEMETHOD=""
-_C.TARGET = False
 
+_C.TARGET = False
+_C.RAND = False
 # Values to be used for image normalization
 _C.MODEL.PIXEL_MEAN = [0.485*255, 0.456*255, 0.406*255]
 # Values to be used for image normalization

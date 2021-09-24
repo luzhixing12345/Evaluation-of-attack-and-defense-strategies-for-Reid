@@ -389,3 +389,47 @@ def build_reid_def_query_data_loader(cfg, dataset_name, mapper=None, num_workers
         pin_memory=True,
     )
     return test_loader
+
+def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+    """
+    Build reid query data loader
+
+    Args:
+        cfg:
+        dataset_name:
+        mapper:
+        num_workers=4
+        **kwargs:
+
+    Returns:
+        test_loader
+    """
+
+    cfg = cfg.clone()
+
+    dataset = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+    if comm.is_main_process():
+        dataset.show_test()
+    test_items = dataset.gallery
+
+    if mapper is not None:
+        transforms = mapper
+    else:
+        transforms = build_transforms(cfg, is_train=False)
+
+    test_set = CommDataset(test_items, transforms, relabel=True)
+
+    mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
+    data_sampler = samplers.InferenceSampler(len(test_set))
+    batch_sampler = torch.utils.data.BatchSampler(data_sampler, mini_batch_size, False)
+
+                                                #https://www.cnblogs.com/ranjiewen/p/10128046.html
+                                                #DATALOADER知识
+    test_loader = DataLoader(   
+        test_set,
+        batch_sampler=batch_sampler,
+        num_workers=num_workers,  # save some memory
+        collate_fn=fast_batch_collator,
+        pin_memory=True,
+    )
+    return test_loader

@@ -24,9 +24,9 @@ def build_heads(cfg):
     head = cfg.MODEL.HEADS.NAME
     return REID_HEADS_REGISTRY.get(head)(cfg)
 
-def build_logits_heads(cfg):
+def build_train_heads(cfg):
     """
     Build REIDHeads defined by `cfg.MODEL.HEADS.LOGITSHEADSNAME`.
     """
-    head = cfg.MODEL.HEADS.LOGITSHEADSNAME
+    head = cfg.MODEL.HEADS.TRAIN
     return REID_HEADS_REGISTRY.get(head)(cfg)

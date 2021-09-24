@@ -22,8 +22,6 @@ class Linear(nn.Module):
         self.num_classes = num_classes
         self.s = scale
         self.m = margin
-        self.weight = torch.empty(num_classes,2048)#feature_dim = 2048
-        self.bias =torch.empty(num_classes,2048)
 
     def forward(self, logits, targets):
         return logits

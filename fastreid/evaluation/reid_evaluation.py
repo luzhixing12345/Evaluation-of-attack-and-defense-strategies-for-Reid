@@ -121,3 +121,5 @@ class ReidEvaluator(DatasetEvaluator):
                 self._results["TPR@FPR={:.0e}".format(fpr)] = tprs[ind]
 
         return copy.deepcopy(self._results)
+
+

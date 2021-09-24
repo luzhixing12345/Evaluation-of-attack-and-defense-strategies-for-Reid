@@ -4,8 +4,9 @@
 @contact: sherlockliao01@gmail.com
 """
 
-from .build import REID_HEADS_REGISTRY, build_heads,build_logits_heads
+from .build import REID_HEADS_REGISTRY, build_heads,build_train_heads
 
 # import all the meta_arch, so they will be registered
 from .embedding_head import EmbeddingHead
+from .training_head import TrainingHead
 from .clas_head import ClasHead

@@ -8,43 +8,18 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-__all__ = [
-    'Identity',
-    'Flatten',
-    'GlobalAvgPool',
-    'GlobalMaxPool',
-    'GeneralizedMeanPooling',
-    'GeneralizedMeanPoolingP',
-    'FastGlobalAvgPool',
-    'AdaptiveAvgMaxPool',
-    'ClipGlobalAvgPool',
-]
-
-
-class Identity(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-    def forward(self, input):
-        return input
+__all__ = ["Flatten",
+           "GeneralizedMeanPooling",
+           "GeneralizedMeanPoolingP",
+           "FastGlobalAvgPool2d",
+           "AdaptiveAvgMaxPool2d",
+           "ClipGlobalAvgPool2d",
+           ]
 
 
 class Flatten(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
     def forward(self, input):
         return input.view(input.size(0), -1, 1, 1)
-
-
-class GlobalAvgPool(nn.AdaptiveAvgPool2d):
-    def __init__(self, output_size=1, *args, **kwargs):
-        super().__init__(output_size)
-
-
-class GlobalMaxPool(nn.AdaptiveMaxPool2d):
-    def __init__(self, output_size=1, *args, **kwargs):
-        super().__init__(output_size)
 
 
 class GeneralizedMeanPooling(nn.Module):
@@ -61,7 +36,7 @@ class GeneralizedMeanPooling(nn.Module):
                      be the same as that of the input.
     """
 
-    def __init__(self, norm=3, output_size=1, eps=1e-6, *args, **kwargs):
+    def __init__(self, norm=3, output_size=1, eps=1e-6):
         super(GeneralizedMeanPooling, self).__init__()
         assert norm > 0
         self.p = float(norm)
@@ -70,7 +45,7 @@ class GeneralizedMeanPooling(nn.Module):
 
     def forward(self, x):
         x = x.clamp(min=self.eps).pow(self.p)
-        return F.adaptive_avg_pool2d(x, self.output_size).pow(1. / self.p)
+        return torch.nn.functional.adaptive_avg_pool2d(x, self.output_size).pow(1. / self.p)
 
     def __repr__(self):
         return self.__class__.__name__ + '(' \
@@ -82,16 +57,16 @@ class GeneralizedMeanPoolingP(GeneralizedMeanPooling):
     """ Same, but norm is trainable
     """
 
-    def __init__(self, norm=3, output_size=1, eps=1e-6, *args, **kwargs):
+    def __init__(self, norm=3, output_size=1, eps=1e-6):
         super(GeneralizedMeanPoolingP, self).__init__(norm, output_size, eps)
         self.p = nn.Parameter(torch.ones(1) * norm)
 
 
-class AdaptiveAvgMaxPool(nn.Module):
-    def __init__(self, output_size=1, *args, **kwargs):
-        super().__init__()
-        self.gap = FastGlobalAvgPool()
-        self.gmp = GlobalMaxPool(output_size)
+class AdaptiveAvgMaxPool2d(nn.Module):
+    def __init__(self):
+        super(AdaptiveAvgMaxPool2d, self).__init__()
+        self.gap = FastGlobalAvgPool2d()
+        self.gmp = nn.AdaptiveMaxPool2d(1)
 
     def forward(self, x):
         avg_feat = self.gap(x)
@@ -100,9 +75,9 @@ class AdaptiveAvgMaxPool(nn.Module):
         return feat
 
 
-class FastGlobalAvgPool(nn.Module):
-    def __init__(self, flatten=False, *args, **kwargs):
-        super().__init__()
+class FastGlobalAvgPool2d(nn.Module):
+    def __init__(self, flatten=False):
+        super(FastGlobalAvgPool2d, self).__init__()
         self.flatten = flatten
 
     def forward(self, x):
@@ -113,11 +88,10 @@ class FastGlobalAvgPool(nn.Module):
             return x.view(x.size(0), x.size(1), -1).mean(-1).view(x.size(0), x.size(1), 1, 1)
 
 
-
-class ClipGlobalAvgPool(nn.Module):
-    def __init__(self, *args, **kwargs):
+class ClipGlobalAvgPool2d(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.avgpool = FastGlobalAvgPool()
+        self.avgpool = FastGlobalAvgPool2d()
 
     def forward(self, x):
         x = self.avgpool(x)
