@@ -11,7 +11,6 @@ since they are meant to represent the "common default behavior" people need in t
 import argparse
 
 from torch import storage
-from fastreid.modeling.meta_arch.build import build_model_for_pretrain,build_model_for_attack
 import logging
 import os
 import sys
@@ -21,10 +20,10 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
 
-from fastreid.data import build_reid_test_loader, build_reid_train_loader,build_reid_adv_test_loader,build_reid_def_adv_test_loader
+from fastreid.data import build_reid_test_loader, build_reid_train_loader,build_reid_adv_test_loader,build_reid_def_adv_test_loader,build_reid_def_test_loader
 from fastreid.evaluation import (ReidEvaluator,
                                  inference_on_dataset, print_csv_format)
-from fastreid.modeling.meta_arch import build_model
+from fastreid.modeling.meta_arch import build_model,build_model_main
 from fastreid.solver import build_lr_scheduler, build_optimizer
 from fastreid.utils import comm
 from fastreid.utils.checkpoint import Checkpointer
@@ -52,12 +51,10 @@ def default_argument_parser():
         action="store_true",
         help="whether to attempt to resume from the checkpoint directory",
     )
-    parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
+    parser.add_argument("--T", action="store_true", help="to train the original model")
     parser.add_argument("--attack",action="store_true", help="attack the model")
-    parser.add_argument("--C",action="store_true", help="using the classcification attack method")
-    parser.add_argument("--R",action="store_true", help="using the ranking attack method")
     parser.add_argument("--defense",action="store_true", help="defend the model")
-    parser.add_argument("--query-train",action="store_true", help="whether train the query set")
+    parser.add_argument("--record",action="store_true", help="whether to record the result in the excel")
 
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="total number of machines")
@@ -396,25 +393,14 @@ class DefaultTrainer(TrainerBase):
 
     #训练query set
     @classmethod
-    def build_model_for_pretrain(cls, cfg):
+    def build_model_main(cls, cfg):
         """
         Returns:
             torch.nn.Module:
         It now calls :func:`fastreid.modeling.build_model`.
         Overwrite it if you'd like a different model.
         """
-        model = build_model_for_pretrain(cfg)
-        return model
-
-    @classmethod
-    def build_model_for_attack(cls, cfg):
-        """
-        Returns:
-            torch.nn.Module:
-        It now calls :func:`fastreid.modeling.build_model`.
-        Overwrite it if you'd like a different model.
-        """
-        model = build_model_for_attack(cfg)
+        model = build_model_main(cfg)
         return model
 
 
@@ -467,6 +453,9 @@ class DefaultTrainer(TrainerBase):
     def build_def_adv_test_loader(cls, cfg, dataset_name):
         return build_reid_def_adv_test_loader(cfg, dataset_name=dataset_name)
 
+    @classmethod
+    def build_def_test_loader(cls, cfg, dataset_name):
+        return build_reid_def_test_loader(cfg, dataset_name=dataset_name)
         
 
     @classmethod
@@ -482,6 +471,11 @@ class DefaultTrainer(TrainerBase):
     @classmethod
     def build_def_adv_evaluator(cls, cfg, dataset_name, output_dir=None):
         data_loader, num_query = cls.build_def_adv_test_loader(cfg, dataset_name)
+        return data_loader, ReidEvaluator(cfg, num_query, output_dir)
+
+    @classmethod
+    def build_def_evaluator(cls, cfg, dataset_name, output_dir=None):
+        data_loader, num_query = cls.build_def_test_loader(cfg, dataset_name)
         return data_loader, ReidEvaluator(cfg, num_query, output_dir)
 
     @classmethod
@@ -580,6 +574,46 @@ class DefaultTrainer(TrainerBase):
             logger.info("Prepare testing set")
             try:
                 data_loader, evaluator = cls.build_def_adv_evaluator(cfg, dataset_name)
+            except NotImplementedError:
+                logger.warn(
+                    "No evaluator found. implement its `build_evaluator` method."
+                )
+                results[dataset_name] = {}
+                continue
+            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results[dataset_name] = results_i
+
+            if comm.is_main_process():
+                assert isinstance(
+                    results, dict
+                ), "Evaluator must return a dict on the main process. Got {} instead.".format(
+                    results
+                )
+                logger.info("Evaluation results for {} in csv format:".format(dataset_name))
+                results_i['dataset'] = dataset_name
+                print_csv_format(results_i)
+
+        if len(results) == 1:
+            results = list(results.values())[0]
+
+        return results_i
+
+    @classmethod
+    def def_test(cls, cfg, model):
+        """
+        Args:
+            cfg (CfgNode):
+            model (nn.Module):
+        Returns:
+            dict: a dict of result metrics
+        """
+        logger = logging.getLogger(__name__)
+
+        results = OrderedDict()
+        for idx, dataset_name in enumerate(cfg.DATASETS.TESTS):
+            logger.info("Prepare testing set")
+            try:
+                data_loader, evaluator = cls.build_def_evaluator(cfg, dataset_name)
             except NotImplementedError:
                 logger.warn(
                     "No evaluator found. implement its `build_evaluator` method."

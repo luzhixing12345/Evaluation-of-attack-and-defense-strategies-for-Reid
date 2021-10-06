@@ -426,7 +426,7 @@ class MomentumIterativeAttack(Attack, LabelMixin):
             #   implementations (both cleverhans and the link from the paper)
             #   it is .mean(), but actually it shouldn't matter
             if self.ord == np.inf:
-                delta.data += batch_multiply(self.eps_iter, torch.sign(g))
+                delta.data += batch_multiply(self.eps_iter, torch.sign(g)*self.clip_max)
                 delta.data = batch_clamp(self.eps, delta.data)
                 delta.data = clamp(
                     x + delta.data, min=self.clip_min, max=self.clip_max) - x

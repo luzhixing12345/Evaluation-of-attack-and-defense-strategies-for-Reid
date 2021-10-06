@@ -2,29 +2,26 @@
 import torch
 import numpy as np
 from collections import defaultdict
-from fastreid.utils.reid_patch import process_set,pairwise_distance
+from fastreid.utils.reid_patch import process_set,pairwise_distance, save_image
 
-def FNA(q_loader, attack, model,rand, device='cuda'):
+def FNA(q_loader, attack, model,rand,pos,device='cuda'):
     """Perturb the queries with FNA
     
     Arguments:
-        q_loader {pytorch dataloader} -- dataloader of the query dataset
-        attack {advertorch.attack} -- adversarial attack to perform on the queries
-        model {pytorch model} -- pytorch model to evaluate
-        device {cuda device} --
-        cosine {bool} -- evaluate with cosine similarity
-        triplet {bool} -- model trained with triplet or not
-        classif {bool} -- model trained with cross entropy
-        transforms {bool} -- apply transforms
+        :q_loader {pytorch dataloader} -- dataloader of the query dataset
+        :attack {advertorch.attack} -- adversarial attack to perform on the queries
+        :model {pytorch model} -- pytorch model to evaluate
+        :device {cuda device} --
+        :cosine {bool} -- evaluate with cosine similarity
+        :triplet {bool} -- model trained with triplet or not
+        :classif {bool} -- model trained with cross entropy
+        :transforms {bool} -- apply transforms
     
     Returns:
-        features -- Tensor of the features of the queries
-        ids -- numpy array of ids
-        cams -- numpy array of camera ids
+        :features -- Tensor of the features of the queries
+        :ids -- numpy array of ids
+        :cams -- numpy array of camera ids
     """
-    ids = []
-    cams = []
-    features = []
     model.eval()
     probe_features, probe_ids, probe_cams = process_set(q_loader, model)
 
@@ -76,17 +73,8 @@ def FNA(q_loader, attack, model,rand, device='cuda'):
         guide_features.append(torch.stack(guide)) 
 
     guide_features = torch.stack(guide_features)
-    b_s = q_loader.batch_size
+    b_s = q_loader.batch_sampler.batch_size
     for guides, data in zip(torch.split(guide_features, b_s), q_loader):
-        image_adv = attack.perturb(data['image'].to(device), guides.to(device))
-        with torch.no_grad():
-            output = model(image_adv.to(device))
-        features.append(output)
-        ids.append(data['id'].cpu())
-        cams.append(data['cam'].cpu())
-
-    ids = torch.cat(ids, 0)
-    cams = torch.cat(cams, 0)
-    features = torch.cat(features, 0)
-
-    return features.cpu(), ids.numpy(), cams.numpy()
+        image_adv = attack.perturb((data['images']/255).to(device), guides.to(device))
+        path = data['img_paths']
+        save_image(image_adv,path,pos)

@@ -102,11 +102,15 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     """
     num_q, num_g = distmat.shape
 
+    print("distmat.shape = ",distmat.shape)
+    print('q_pids = ',q_pids)
+    print('g_pids = ',g_pids)
     if num_g < max_rank:
         max_rank = num_g
         print('Note: number of gallery samples is quite small, got {}'.format(num_g))
 
-    indices = np.argsort(distmat, axis=1)
+    indices = np.argsort(distmat, axis=1) #排序,替换为对应的下标值
+    print('indices = ',indices)
 
     matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32)
 

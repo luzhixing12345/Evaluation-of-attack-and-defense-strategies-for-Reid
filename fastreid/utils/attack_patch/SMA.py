@@ -1,8 +1,9 @@
 
 
+from fastreid.utils.reid_patch import save_image
 import torch
 
-def SMA(g_loader, attack, model, device='cuda'):
+def SMA(q_loader, attack, model,pos,device='cuda'):
     
     """Perturb the gallery with SMA
     
@@ -17,25 +18,13 @@ def SMA(g_loader, attack, model, device='cuda'):
         ids -- numpy array of ids
         cams -- numpy array of camera ids
     """
-    ids = []
-    cams = []
-    features = []
     model.eval()
 
-    for _,data in enumerate(g_loader):
+    for _,data in enumerate(q_loader):
         with torch.no_grad():
-            img=data['image'].to(device)
-            raw_features = model(img)
-        
-        image_adv = attack.perturb(img, raw_features.to(device))
-        with torch.no_grad():
-            output = model(image_adv.to(device))
-        features.append(output)
-        ids.append(data['targets'].cpu())
-        cams.append(data['camid'].cpu())
+            img=data['images'].to(device)
+            raw_features = model(img/255.0)
+        image_adv = attack.perturb(img/255.0,raw_features.to(device))
 
-    ids = torch.cat(ids, 0)
-    cams = torch.cat(cams, 0)
-    features = torch.cat(features, 0)
-
-    return features.cpu(), ids.numpy(), cams.numpy()
+        path = data["img_paths"]
+        save_image(image_adv,path,pos)

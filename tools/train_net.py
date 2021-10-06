@@ -4,18 +4,20 @@
 @author:  sherlock
 @contact: sherlockliao01@gmail.com
 """
-
 import sys
 
 sys.path.append('.')
-
-from fastreid.config import get_cfg
-from fastreid.engine import DefaultTrainer, default_argument_parser, default_setup, launch
-from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import evaluate_misMatch, get_query_set, record,train_query_set,get_pure_result
-from fastreid.utils.attack_patch.attack_patch import attack_C,attack_R
+from fastreid.utils.reid_patch import get_gallery_set, get_query_set, get_train_set, record,get_result, release_cuda_memory
+from fastreid.utils.attack_patch.attack_patch import attack
 from fastreid.utils.defense_patch.defense_patch import defense
-import torch
+from fastreid.utils.reid_patch import match_type
+from fastreid.engine import DefaultTrainer, default_argument_parser, default_setup, launch
+from fastreid.config import get_cfg
+
+
+
+
+
 def setup(args):
     """
     Create configs and perform basic setups.
@@ -30,78 +32,50 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
+    
+    if args.T:
+        trainer = DefaultTrainer(cfg)
+        trainer.resume_or_load(resume=args.resume)
+        trainer.train()
+        return 
 
-    '''
-        攻击思路：
-                白盒攻击：通过训练集训练出model，得到logits值，针对请求集(query_set)的图像做出对应的攻击
-                         并在注册集(gallery_set)上测试其reid能力
-    '''
-    # if args.eval_only:
-    #     cfg.defrost()
-    #     cfg.MODEL.BACKBONE.PRETRAIN = False
-    #     model = DefaultTrainer.build_model(cfg)
-
-    #Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
-
-    #res = DefaultTrainer.test(cfg, model)
-    # #     return res
-
-    # trainer = DefaultTrainer(cfg)
-
-    # trainer.resume_or_load(resume=args.resume)
-    # trainer.train()
-    query_set=get_query_set(cfg)
+    query_set = get_query_set(cfg)  
+    gallery_set = get_gallery_set(cfg)
+    train_set = get_train_set(cfg)  
     cfg.defrost()
     cfg.MODEL.BACKBONE.PRETRAIN = False
-    
-    #保存的结果，默认值都为0
-    pure_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
-    adv_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
-    def_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
-    def_adv_result={'Rank-1':0,'Rank-5':0,'Rank-10':0,'mAP':0,'mINP':0,'metric':0,'misMatch':0}
 
-    if args.query_train:
-        cfg = train_query_set(cfg,query_set)
-        #模型保存的位置在(./model/query_trained.pth)
-        print('finished the train for query set ')
-        print('---------------------------------------------')
-    
-    #注:已经预先在fastreid\config\defaults.py中定义了
-    # _C.MODEL.QUERYSET_TRAINED_WEIGHT = './model/query_trained.pth'
-    # _C.MODEL.TRAINSET_TRAINED_WEIGHT = "./model/pretrained.pth"
-    # _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/adv_trained.pth"
-    #三个位置为模型保存的位置
+    # the final result conclude some evaluating indicator, which you can get from ./fastreid/utils/reid_patch.py
+    # if you want to update or change it, you can find the computing method in fastreid\evaluation\reid_evaluation.py
+    # and add your own computing method and indicator in it 
 
-    pure_result,std_model=get_pure_result(cfg,query_set)
+    # we will totally record four results as below
+    # pure_result = {'Rank-1': 0, 'Rank-5': 0, 'Rank-10': 0,'mAP': 0, 'mINP': 0, 'metric': 0}
+    # att_result = {'Rank-1': 0, 'Rank-5': 0, 'Rank-10': 0,'mAP': 0, 'mINP': 0, 'metric': 0}
+    # def_result = {'Rank-1': 0, 'Rank-5': 0, 'Rank-10': 0,'mAP': 0, 'mINP': 0, 'metric': 0}
+    # def_adv_result = {'Rank-1': 0, 'Rank-5': 0, 'Rank-10': 0,'mAP': 0, 'mINP': 0, 'metric': 0}
+
+    
+    # the model positions have been already defined in fastreid\config\defaults.py 
+    # _C.MODEL.WEIGHTS                = "./model/model_final.pth"       the origin model after training 
+    # _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'      the model that can classify well in query set
+    # _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"       the model that can defense well towards the attack method
+    
+    pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
 
     if args.attack:
         print('start attack')
-        if args.C:#针对分类问题的攻击
-            query_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_set.dataset.num_classes)
-            model = DefaultTrainer.build_model_for_attack(query_cfg)  #启用baseline_for_query_train
-            Checkpointer(model).load(query_cfg.MODEL.QUERYSET_TRAINED_WEIGHT)  # load trained model
-            
-            attack_C(query_cfg,model,query_set)
+        att_result = attack(cfg,query_set,gallery_set,match_type(cfg,'attack'),pos='adv_query')
 
-            adv_result =DefaultTrainer.advtest(query_cfg, std_model)     #advtest用于测试adv_query与gallery合成的test_set
-            pure_misMatch = evaluate_misMatch(std_model,query_set)
-            pure_result['misMatch']=pure_misMatch
-            adv_misMatch =evaluate_misMatch(model,query_set)
-            adv_result['misMatch']=adv_misMatch
-        elif args.R:#针对排序问题的攻击
-            model = DefaultTrainer.build_model_for_attack(cfg)  #启用baseline_for_query_train
-            Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
-            adv_result=attack_R(cfg,model,query_set)
-        else:
-            print('You must directly claim which type of the attack method ,please check in the USE.md to change your arguments')
-            raise
     if args.defense:
-        #print('start defense')
-        def_result,def_adv_result =defense(cfg,query_set)
+        print('start defense')
+        def_result, def_adv_result = defense(cfg,train_set,query_set,gallery_set,match_type(cfg,'defense'))
 
+    if args.record:
+        record(cfg, pure_result, att_result, def_result, def_adv_result)
+        print('the results were recorded in the excel in the root path')
 
-    record(cfg,pure_result,adv_result,def_result,def_adv_result)
-    print("You have finished the task !")
+    print("You have finished all the jobs !")
 
 
 if __name__ == "__main__":

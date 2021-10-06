@@ -67,7 +67,7 @@ class GradientSignAttack(Attack, LabelMixin):
         if self.targeted:
             loss = -loss
         loss.backward()
-        grad_sign = xadv.grad.detach().sign()*255
+        grad_sign = xadv.grad.detach().sign()
 
         xadv = xadv + batch_multiply(self.eps, grad_sign)
  
@@ -93,7 +93,7 @@ class GradientAttack(Attack, LabelMixin):
     """
 
     def __init__(self, predict, loss_fn=None, eps=0.3,
-                 clip_min=0., clip_max=255., targeted=False):
+                 clip_min=0., clip_max=1., targeted=False):
         """
         Create an instance of the GradientAttack.
         """
@@ -125,7 +125,7 @@ class GradientAttack(Attack, LabelMixin):
         if self.targeted:
             loss = -loss
         loss.backward()
-        grad = normalize_by_pnorm(xadv.grad)*255
+        grad = normalize_by_pnorm(xadv.grad)    
         xadv = xadv + batch_multiply(self.eps, grad)
         xadv = clamp(xadv, self.clip_min, self.clip_max)
 

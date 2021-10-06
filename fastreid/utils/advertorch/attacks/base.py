@@ -10,6 +10,7 @@ from abc import ABCMeta
 import torch
 
 from advertorch.utils import replicate_input
+from torch.nn.functional import softmax
 
 
 class Attack(object):
@@ -57,6 +58,8 @@ class LabelMixin(object):
         """
         with torch.no_grad():
             outputs = self.predict(x)
+        softmax = torch.nn.Softmax(dim=1)
+        outputs = softmax(outputs)
         _, y = torch.max(outputs, dim=1)
         return y
 

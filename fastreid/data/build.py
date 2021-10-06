@@ -160,6 +160,28 @@ def _def_advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, nu
         "test_batch_size": cfg.TEST.IMS_PER_BATCH,
         "num_query": num_query,
     }
+def _def_test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
+    if transforms is None:
+        transforms = build_transforms(cfg, is_train=False)
+
+    if test_set is None:
+        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
+        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+        if comm.is_main_process():
+            data.show_test()
+        test_items = data.def_query + data.gallery
+        test_set = CommDataset(test_items, transforms, relabel=False)
+
+        # Update query number
+        #num_query = len(data.def_adv_query)
+        num_query = len(data.def_query)
+
+    return {
+        "test_set": test_set,
+        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
+        "num_query": num_query,
+    }
+
 
 @configurable(from_config=_test_loader_from_config)
 def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=4):
@@ -272,6 +294,41 @@ def build_reid_def_adv_test_loader(test_set, test_batch_size, num_query, num_wor
     )
     return test_loader, num_query
 
+@configurable(from_config=_def_test_loader_from_config)
+def build_reid_def_test_loader(test_set, test_batch_size, num_query, num_workers=4):
+    """
+    Similar to `build_reid_train_loader`. This sampler coordinates all workers to produce
+    the exact set of all samples
+    This interface is experimental.
+
+    Args:
+        test_set:
+        test_batch_size:
+        num_query:
+        num_workers:
+
+    Returns:
+        DataLoader: a torch DataLoader, that loads the given reid dataset, with
+        the test-time transformation.
+
+    Examples:
+    ::
+        data_loader = build_reid_test_loader(test_set, test_batch_size, num_query)
+        # or, instantiate with a CfgNode:
+        data_loader = build_reid_test_loader(cfg, "my_test")
+    """
+    mini_batch_size = test_batch_size // comm.get_world_size()
+    data_sampler = samplers.InferenceSampler(len(test_set))
+    batch_sampler = torch.utils.data.BatchSampler(data_sampler, mini_batch_size, False)
+    test_loader = DataLoaderX(
+        comm.get_local_rank(),
+        dataset=test_set,
+        batch_sampler=batch_sampler,
+        num_workers=num_workers,  # save some memory
+        collate_fn=fast_batch_collator,
+        pin_memory=True,
+    )
+    return test_loader, num_query
 
 def trivial_batch_collator(batch):
     """
@@ -345,6 +402,54 @@ def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,*
         pin_memory=True,
     )
     return test_loader
+
+
+def build_reid_att_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+    """
+    Build reid query data loader
+
+    Args:
+        cfg:
+        dataset_name:
+        mapper:
+        num_workers=4
+        **kwargs:s
+
+
+    Returns:
+        test_loader
+    """
+
+    cfg = cfg.clone()
+
+    dataset = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+    if comm.is_main_process():
+        dataset.show_test()
+    test_items = dataset.adv_query
+
+    if mapper is not None:
+        transforms = mapper
+    else:
+        transforms = build_transforms(cfg, is_train=False)
+
+    test_set = CommDataset(test_items, transforms, relabel=True)
+
+    mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
+    data_sampler = samplers.InferenceSampler(len(test_set))
+    batch_sampler = torch.utils.data.BatchSampler(data_sampler, mini_batch_size, False)
+
+                                                #https://www.cnblogs.com/ranjiewen/p/10128046.html
+                                                #DATALOADER知识
+    test_loader = DataLoader(   
+        test_set,
+        batch_sampler=batch_sampler,
+        num_workers=num_workers,  # save some memory
+        collate_fn=fast_batch_collator,
+        pin_memory=True,
+    )
+    return test_loader
+
+
 
 def build_reid_def_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
     """

@@ -72,10 +72,11 @@ class TrainingHead(nn.Module):
 
         # Evaluation
         # fmt: off
-        #if not self.training: return bn_feat
+        # if not self.training:
+        #     return bn_feat
         # fmt: on
 
-        # Training and evaluation together
+        # Training
         if self.classifier.__class__.__name__ == 'Linear':
             cls_outputs = self.classifier(bn_feat)
             pred_class_logits = F.linear(bn_feat, self.classifier.weight)
@@ -84,7 +85,7 @@ class TrainingHead(nn.Module):
             pred_class_logits = self.classifier.s * F.linear(F.normalize(bn_feat),
                                                              F.normalize(self.classifier.weight))
 
-        # fmt: off
+        #fmt: off
         if self.neck_feat == "before":  feat = global_feat[..., 0, 0]
         elif self.neck_feat == "after": feat = bn_feat
         else:                           raise KeyError(f"{self.neck_feat} is invalid for MODEL.HEADS.NECK_FEAT")

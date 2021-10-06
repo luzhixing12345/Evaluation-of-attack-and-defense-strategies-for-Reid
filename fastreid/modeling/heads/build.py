@@ -30,3 +30,10 @@ def build_train_heads(cfg):
     """
     head = cfg.MODEL.HEADS.TRAIN
     return REID_HEADS_REGISTRY.get(head)(cfg)
+
+def build_feature_heads(cfg):
+    """
+    Build REIDHeads defined by `cfg.MODEL.HEADS.LOGITSHEADSNAME`.
+    """
+    head = cfg.MODEL.HEADS.FEATURE
+    return REID_HEADS_REGISTRY.get(head)(cfg)

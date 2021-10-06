@@ -3,23 +3,20 @@
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import get_train_set,train_train_set,eval_train
+from fastreid.utils.reid_patch import get_train_set
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
 
 from torch import Tensor
 device='cuda'
-def gradient_regulation(cfg):
+def gradient_regulation(cfg,train_data_loader):
     # train a robust model again with another defense machanism
-
-    train_data_loader = get_train_set(cfg) #读取训练集
-    train_train_set(cfg,train_data_loader)#训练training set的分类层，建立图像到id的映射
 
     train_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
 
-    model = DefaultTrainer.build_model_for_attack(train_cfg)  #启用baseline_for_defense
-    Checkpointer(model).load(train_cfg.MODEL.TRAINSET_TRAINED_WEIGHT)  # load trained model
+    model = DefaultTrainer.build_model_main(train_cfg)  #启用baseline_for_defense
+    Checkpointer(model).load(train_cfg.MODEL.WEIGHTS)  # load trained model
     
     #optimizer = optim.Adam(model.parameters(),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5)
     #optimizer = optim.SGD(model.parameters(),lr=0.00001,weight_decay=1e-5) # for bot_r50
@@ -28,12 +25,12 @@ def gradient_regulation(cfg):
     loss_fun = nn.CrossEntropyLoss()
     loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
 
-    epoch = 4000
+    max_id = 4000
     
     model.train()
     
     for batch_idx,data in enumerate(train_data_loader):
-        if batch_idx>epoch :
+        if batch_idx>max_id :
             break
         clean_data = data['images']
         targets = data['targets'].to(device)
@@ -45,19 +42,10 @@ def gradient_regulation(cfg):
         loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
         loss.backward()
         optimizer.step()
-        # total_loss += loss.item()
-        # print('Train Epoch:{} batch_idx:{} Loss:{}'.format(writer_idx,batch_idx,loss.item()))
-        if batch_idx%1000 == 0 and batch_idx!=0:
-            accurency = eval_train(model,train_data_loader,400)
-            print('---------------------------------------------------------')
-            print(f'the accurency of training the training set is {accurency}')
 
-    
-    # print('loss_dict = ',loss_dict)
-    # print('acc_clean_dict = ',acc_clean_dict)
 
     print('finished gra_training !')
-    Checkpointer(model,'model').save('adv_trained')
+    Checkpointer(model,'model').save('def_trained')
     print('Successfully saved the gra_trained model !')
 
 

@@ -13,7 +13,7 @@ from .build import REID_HEADS_REGISTRY
 
 
 @REID_HEADS_REGISTRY.register()
-class EmbeddingHead(nn.Module):
+class FeatureHead(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         # fmt: off
@@ -70,29 +70,5 @@ class EmbeddingHead(nn.Module):
         bn_feat = self.bottleneck(global_feat)
         bn_feat = bn_feat[..., 0, 0]
 
-        # Evaluation
-        # fmt: off
-        if not self.training:
-            return bn_feat
-        # fmt: on
+        return bn_feat
 
-        # Training
-        if self.classifier.__class__.__name__ == 'Linear':
-            cls_outputs = self.classifier(bn_feat)
-            pred_class_logits = F.linear(bn_feat, self.classifier.weight)
-        else:
-            cls_outputs = self.classifier(bn_feat, targets)
-            pred_class_logits = self.classifier.s * F.linear(F.normalize(bn_feat),
-                                                             F.normalize(self.classifier.weight))
-
-        # fmt: off
-        if self.neck_feat == "before":  feat = global_feat[..., 0, 0]
-        elif self.neck_feat == "after": feat = bn_feat
-        else:                           raise KeyError(f"{self.neck_feat} is invalid for MODEL.HEADS.NECK_FEAT")
-        # fmt: on
-
-        return {
-            "cls_outputs": cls_outputs,
-            "pred_class_logits": pred_class_logits,
-            "features": feat,
-        }

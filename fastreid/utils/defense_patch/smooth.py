@@ -14,7 +14,7 @@ def smooth(cfg,model,query_set):
                                 JPEGFilter(10)
                                 )
 
-    adversary = match_attack_method(cfg,model,query_set)
+    adversary = match_attack_method(cfg,model)
     for data in query_set:
         clip_data, true_label, path = data['images'].to(device),data['targets'].to(device),data['img_paths'].to(device)      
         adv_data = adversary.perturb(clip_data,true_label)

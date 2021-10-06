@@ -1,20 +1,16 @@
 
 import os
-from sys import path
-import time
-
 import openpyxl
 import torch
 import torch.nn as nn
 import numpy as np
-from torch import optim
 from fastreid.data.build import (build_reid_def_query_data_loader,
                                  build_reid_query_data_loader,
+                                 build_reid_att_query_data_loader,
                                  build_reid_gallery_data_loader,
                                  build_reid_train_loader)
 from fastreid.engine import DefaultTrainer
-from fastreid.utils.compute_dist import build_dist
-from fastreid.evaluation.rank import evaluate_rank
+from fastreid.solver.build import build_optimizer
 from fastreid.utils.checkpoint import Checkpointer
 from openpyxl.utils import get_column_letter
 from torchvision import transforms
@@ -24,9 +20,24 @@ device= 'cuda'
 excel_name = 'result.xlsx'
 txt_name = 'result.txt'
 
+C_Attack_algorithm_library=["FGSM",'IFGSM','MIFGSM','CW','ODFA']  #针对分类问题的攻击算法库
+R_Attack_algorithm_library=['SMA','FNA','MIS-RANKING','MUAP']
+Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
+
+G_Defense_algorithm_library=['ADV_DEF','GRA_REG']
+R_Defense_algorithm_library=['GOAT']
+Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_library
+
+evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
+num=len(evaluation_indicator)
+
 def get_query_set(cfg):
     query_set=build_reid_query_data_loader(cfg,cfg.DATASETS.TESTS[0])
     return query_set
+
+def get_att_query_set(cfg):
+    adv_query_set = build_reid_att_query_data_loader(cfg,cfg.DATASETS.TESTS[0])
+    return adv_query_set
 
 def get_def_query_set(cfg):
     def_query_set=build_reid_def_query_data_loader(cfg,cfg.DATASETS.TESTS[0])
@@ -35,142 +46,150 @@ def get_def_query_set(cfg):
 def get_gallery_set(cfg):
     gallery_set=build_reid_gallery_data_loader(cfg,cfg.DATASETS.TESTS[0])
     return gallery_set
+
 def get_train_set(cfg):
     train_data_loader = build_reid_train_loader(cfg)
     return train_data_loader
 
-def get_pure_result(cfg,query_set):
-    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_set.dataset.num_classes)
-    std_model = DefaultTrainer.build_model(cfg)
-    Checkpointer(std_model).load(cfg.MODEL.WEIGHTS)
-    pure_result=DefaultTrainer.test(cfg, std_model)       #test用于测试原始的query与gallery合成的test_set
-    return pure_result,std_model
+
 
 @torch.no_grad()
-def eval_train(model,query_data_loader,max_batch_id=-1):
+def eval_train(model,query_data_loader):
     model.eval()
     correct = 0 
     softmax = nn.Softmax(dim=1)
-    for batch_idx,data in enumerate(query_data_loader):
-        if max_batch_id!=-1 and batch_idx>=max_batch_id:
-            break
+    for _,data in enumerate(query_data_loader):
         logits = model(data)
         probabilities = softmax(logits)
         pred = probabilities.argmax(dim=1,keepdim=True)
         targets = data['targets'].to(device)
         correct += pred.eq(targets.view_as(pred)).sum().item()
 
-    if max_batch_id==-1:
-        l=len(query_data_loader.dataset)
-    else :
-        l=max_batch_id*64
-    return 100. * correct / l
-
-def evaluate_misMatch(model,query_data_loader):
-    return 0
-    # correct = 0 
-    # softmax = nn.Softmax(dim=1)
-    # for batch_idx,data in enumerate(query_data_loader):
-    #     logits = model(data)
-    #     probabilities = softmax(logits)
-    #     pred = probabilities.argmax(dim=1,keepdim=True).to("cpu")
-    #     targets = torch.ones_like(data['targets'].to("cpu")).to("cpu")
-    #     correct += pred.eq(targets.view_as(pred)).sum().item()
-
-    # return 100. * correct / len(query_data_loader.dataset)
+    return 100. * correct / len(query_data_loader.dataset)
 
 
-def save_image(imgs,paths,str):                                                                     
+def save_image(imgs,paths,str):    
+    imgs= imgs.cpu()                                                              
     toPIL = transforms.ToPILImage() #这个函数可以将张量转为PIL图片，由小数转为0-255之间的像素值
     
     for img,path in zip(imgs,paths):  #zip 并行遍历
         pic = toPIL(img)
-        position = path.find('query/') # path给的是绝对位置
+        position = path.find('query/')+path.find('train/')+1 # path给的是绝对位置
         name = path[position+6:] #只需要提取出其名字即可
-        pic.save(path[:position]+str+'/'+name)
-    print(f"successful save in {path[:position]+str}")
+        if path.find('train/')!=-1:
+            bias=-13  #bounding_box
+        else :
+            bias=0
+        pic.save(path[:position+bias]+str+'/'+name)
+    print(f"successful save in {path[:position+bias]+str}")
 
-def train_query_set(cfg,query_data_loader):
+def classify_test_set(cfg,query_data_loader):
     '''
-    固定住backbone的权重，利用query_set重新训练cls_layer的weight,使其也能准确的分类query_set 中的图像和id
+    固定住backbone的权重，利用query_set重新训练cls_layer的weight,使其也能准确的分类图像和id
     转换成分类问题，可较好的接收针对于分类问题的算法攻击
     
     '''
-    query_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_data_loader.dataset.num_classes)
-    model = DefaultTrainer.build_model_for_pretrain(query_cfg)  #启用baseline_for_train_query
-    Checkpointer(model).load(query_cfg.MODEL.WEIGHTS)  # load trained model
+    #set the number of neurons of the classifier layer as query set's targets number
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_data_loader.dataset.num_classes)
 
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad ,model.parameters()),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5) 
+    model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
+    Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+
+    optimizer = build_optimizer(cfg,model) 
     loss_fun = nn.CrossEntropyLoss()
-
-    for _,parm in enumerate(model.parameters()):#固定除分类层其他层的权重，在训练中不计算梯度
+    #fix the weight of the backbone layers,and we only train the classifier for query set
+    for _,parm in enumerate(model.parameters()):
         parm.requires_grad=False
     for _,parm in enumerate(model.heads.classifier.parameters()):
         parm.requires_grad=True
-    #分类层参数清空（正态分布）
+
+    # the origin model was trained by training set ,which has different targets number from query set,
+    # so the number of neurons of the classifier layer was different, the weight couldn'y directly be loaded,
+    # and you can see the warning like 
+    # "Skip loading parameter 'heads.classifier.weight' to the model due to incompatible shapes: (751, 2048) in the checkpoint but (0, 2048) in the model! You might want to double check if this is expected.'
+    # so we skip this part of weight and initial weights as below
     torch.nn.init.xavier_normal_(model.heads.classifier.weight)
     loss_fun = nn.CrossEntropyLoss()
 
-    epoch = 5
+    epoch = 5  #as far as i noticed,within 5 epoches the classifier layer can be trained to efficiently behave well
     for i in range(epoch):
         model.train()
-        for batch_idx,data in enumerate(query_data_loader):
-            optimizer.zero_grad()
+        for _,data in enumerate(query_data_loader):
             targets = data['targets'].to(device)
+            optimizer.zero_grad()
             logits = model(data)
             loss = loss_fun(logits,targets)
             loss.backward()
             optimizer.step()
             
-        accurency = eval_train(model,query_data_loader)
-        print('The accurency for Train Epoch {} is {}'.format(i,accurency))
+        accurency = eval_train(model,query_data_loader) #show the accurrency
+        print('The accurency of query set in Train Epoch {} is {}'.format(i,accurency))
         print('---------------------------------------------------------------------')
-    Checkpointer(model,'model').save('query_trained')
-    return cfg
+    Checkpointer(model,'model').save('test_trained') # model was saved in ./model/test_trained.pth
 
-def train_train_set(cfg,train_data_loader):
-    '''
-    固定住backbone的权重，利用train_set重新训练cls_layer的weight ,使其也能准确的分类train_set 中的图像和id
-    转换成分类问题，可较好的接收针对于分类问题的算法攻击
+def match_type(cfg,type):
     
-    '''
-    train_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
-    model = DefaultTrainer.build_model_for_pretrain(train_cfg)  #启用baseline_for_train_query
-    Checkpointer(model).load(train_cfg.MODEL.QUERYSET_TRAINED_WEIGHT)  # load trained model
-    optimizer = DefaultTrainer.build_optimizer(train_cfg, model)
-    for idx,parm in enumerate(model.parameters()):#固定除分类层其他层的权重，在训练中不计算梯度
-        parm.requires_grad=False
-    for idx,parm in enumerate(model.heads.classifier.parameters()):
-        parm.requires_grad=True
-    #分类层参数清空（正态分布）
-    #torch.nn.init.xavier_normal_(model.heads.cls_layer.weight)
-    loss_fun = nn.CrossEntropyLoss()
+    if type == 'attack':
+        atk_method=cfg.MODEL.ATTACKMETHOD
+        if atk_method in C_Attack_algorithm_library:
+            return True
+        elif atk_method in R_Attack_algorithm_library:
+            return False
+        else:
+            raise KeyError('you should use the attack method in the library, or check your spelling')
+    else:
+        def_method=cfg.MODEL.DEFENSEMETHOD
+        if def_method in G_Defense_algorithm_library:
+            return True
+        elif def_method in R_Defense_algorithm_library:
+            return False
+        else :
+            raise KeyError('you should use the defense method in the library, or check your spelling')
 
-    model.train()
-    for batch_idx,data in enumerate(train_data_loader):
-        if batch_idx>=4000:
-            break
-        optimizer.zero_grad()
-        targets = data['targets'].to(device)
-        logits = model(data)
-        loss = loss_fun(logits,targets)
-        loss.backward()
-        optimizer.step()
-        if batch_idx%1000==0:
-            accurency = eval_train(model,train_data_loader,400)
-            print('-------------------------------------')
-            print(f'The accurency for the training set is {accurency}')
-            print('-------------------------------------')
 
-    Checkpointer(model,'model').save('pretrained')
-    print('You finish the pretrain for the training set, and the model was saved in ./model/pretrain_model.pth')
-    print('-----------------------------------')
 
+def change_preprocess_image(cfg):
+    def preprocess_image(batched_inputs):
+        """
+        Normalize and batch the input images.
+        """
+        if isinstance(batched_inputs, dict):
+            images = batched_inputs["images"].to(device)
+        elif isinstance(batched_inputs, torch.Tensor):
+            images = batched_inputs.to(device)
+        else:
+            raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
+        
+        images = images * 255.0
+        images.sub(torch.tensor(cfg.MODEL.PIXEL_MEAN).view(1, -1, 1, 1).to(device)).div(torch.tensor(cfg.MODEL.PIXEL_STD).view(1, -1, 1, 1).to(device))
+        return images
+    return preprocess_image
+    
+
+
+def release_cuda_memory():
+    if hasattr(torch.cuda, 'empty_cache'):
+	    torch.cuda.empty_cache()
+
+def get_result(cfg,model_path,step:str)->dict:
+    model =DefaultTrainer.build_model(cfg)  # 启用baseline,用于测评
+    Checkpointer(model).load(model_path)
+    if step=='attack':
+        result = DefaultTrainer.advtest(cfg,model)# advtest用于测试adv_query与gallery合成的test_set
+    elif step=='pure' or step=='defense':
+        result = DefaultTrainer.test(cfg,model)# test用于测试query与gallery合成的test_set
+    elif step =='def-attack':
+        result = DefaultTrainer.def_advtest(cfg,model)# def-advtest用于测试def-adv_query与gallery合成的test_set
+    else:
+        raise KeyError('you must choose the step to select the correct dataset of query and gallery for evaluation.')
+    return result
 
 
 
 def check(save_pos):
     return os.path.exists(save_pos)
+
+
 
 def remove_Sheet(wb,sheet_list):
     if 'Sheet' in sheet_list:
@@ -178,44 +197,31 @@ def remove_Sheet(wb,sheet_list):
     if 'Sheet1' in sheet_list:
         wb.remove(wb['Sheet1'])
 def sheet_init(sheet):
-    from fastreid.utils.attack_patch import Attack_algorithm_library
-    from fastreid.utils.defense_patch import Defense_algorithm_library
-    for row in range (3,4+len(Attack_algorithm_library)*7):
+    for row in range (3,4+len(Attack_algorithm_library)*num):
         for col in range (2,6+len(Defense_algorithm_library)*2):
             sheet.column_dimensions[get_column_letter(col)].width = 20.0
             sheet.row_dimensions[row].height = 40
-    sheet['D3']='PURE_VALUE'
-    sheet['E3']='AFTER_ATTACK'
+    sheet['D3']='PURE VALUE'
+    sheet['E3']='AFTER ATTACK'
     for row,name in enumerate(Attack_algorithm_library):
-        sheet['B'+str(4+7*row)]=name
-        sheet['C'+str(4+7*row)]='Rank-1'
-        sheet['C'+str(5+7*row)]='Rank-5'
-        sheet['C'+str(6+7*row)]='Rank-10'
-        sheet['C'+str(7+7*row)]='mAP'
-        sheet['C'+str(8+7*row)]='mINP'
-        sheet['C'+str(9+7*row)]='metric'
-        sheet['C'+str(10+7*row)]='misMatch'
+        sheet['B'+str(4+num*row)]=name
+        for i in range(4,4+num):
+            sheet['C'+str(i+num*row)]=evaluation_indicator[i-4]
 
     for col,name in enumerate(Defense_algorithm_library):
-        sheet[get_column_letter(6+2*col)+str(3)]='AFTER_DEFENSE'
-        sheet[get_column_letter(7+2*col)+str(3)]=name
+        sheet[get_column_letter(6+2*col)+str(3)]=name
+        sheet[get_column_letter(7+2*col)+str(3)]='ATFER ATTACK'
 
 def save_data(cfg,pure_result,adv_result,def_result,def_adv_result,sheet):
-    from fastreid.utils.attack_patch import Attack_algorithm_library
-    from fastreid.utils.defense_patch import Defense_algorithm_library
 
-    row_start = 4 + 7*Attack_algorithm_library.index(cfg.MODEL.ATTACKMETHOD)
+    row_start = 4 + num*Attack_algorithm_library.index(cfg.MODEL.ATTACKMETHOD)
     column1 = chr(ord('F') + Defense_algorithm_library.index(cfg.MODEL.DEFENSEMETHOD)*2)
     column2 = chr(ord(column1)+1)
 
     for col,dict_name in {'D':pure_result,'E':adv_result,column1:def_result,column2:def_adv_result}.items():
-        sheet[col+str(row_start)]  =dict_name['Rank-1']
-        sheet[col+str(row_start+1)]=dict_name['Rank-5']
-        sheet[col+str(row_start+2)]=dict_name['Rank-10']
-        sheet[col+str(row_start+3)]=dict_name['mAP']
-        sheet[col+str(row_start+4)]=dict_name['mINP']
-        sheet[col+str(row_start+5)]=dict_name['metric']
-        sheet[col+str(row_start+6)]=dict_name['misMatch']
+        for i in range(num):
+            sheet[col+str(row_start+i)]  =dict_name[evaluation_indicator[i]]
+
 
 # def save_config(cfg,pure_result,adv_result,def_adv_result,sheet):
 
@@ -256,7 +262,8 @@ def record(cfg,pure_result,adv_result,def_result,def_adv_result,save_pos= excel_
         sheet = wb[sheet_name]
     else :
         sheet = wb.create_sheet(title = sheet_name)
-        sheet_init(sheet)
+        
+    sheet_init(sheet)
 
     save_data(cfg,pure_result,adv_result,def_result,def_adv_result,sheet)
     #save_config(cfg,pure_result,adv_result,def_adv_result,sheet)
@@ -283,33 +290,15 @@ def process_set(loader, model, device='cuda'):
     model.eval()
     for _, data in enumerate(loader):
         with torch.no_grad():
-            output = model(data['image'].to(device))
+            output = model((data['images']/255.0).to(device))
         features.append(output)
         ids.append(data['targets'].cpu())
-        cams.append(data['camid'].cpu())
+        cams.append(data['camids'].cpu())
     ids = torch.cat(ids, 0)
     cams = torch.cat(cams, 0)
     features = torch.cat(features, 0)
     return features.cpu(), ids.numpy(), cams.numpy()
 
-
-
-
-def calculation_R(cfg,query_features, query_pids, query_camids,gallery_features, gallery_pids, gallery_camids):
-    results={}
-    dist = build_dist(query_features, gallery_features, cfg.TEST.METRIC)
-    cmc, all_AP, all_INP = evaluate_rank(dist, query_pids, gallery_pids, query_camids, gallery_camids)
-    mAP = np.mean(all_AP)
-    mINP = np.mean(all_INP)
-    for r in [1, 5, 10]:
-        results['Rank-{}'.format(r)] = cmc[r - 1] * 100
-    results['mAP'] = mAP * 100
-    results['mINP'] = mINP * 100
-    results["metric"] = (mAP + cmc[0]) / 2 * 100
-    print('--------------------------')
-    print('RANK-1 = ',results['Rank-1'])
-    print('--------------------------')
-    return results
 
 def pairwise_distance(x, y):
     """Compute the matrix of pairwise distances between tensors x and y

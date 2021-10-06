@@ -22,8 +22,7 @@ _C = CN()
 _C.MODEL = CN()
 _C.MODEL.DEVICE = "cuda"
 _C.MODEL.META_ARCHITECTURE = "Baseline"
-_C.MODEL.META_ARCHITECTURE_TRAIN = "Baseline_pretrain"
-_C.MODEL.META_ARCHITECTURE_ATTACK = "Baseline_attack"
+_C.MODEL.META_ARCHITECTURE_TRAIN = "Baseline_train"
 
 _C.MODEL.FREEZE_LAYERS = ['']
 
@@ -59,6 +58,7 @@ _C.MODEL.BACKBONE.PRETRAIN_PATH = ''
 _C.MODEL.HEADS = CN()
 _C.MODEL.HEADS.NAME = "EmbeddingHead"
 _C.MODEL.HEADS.TRAIN = "TrainingHead"
+_C.MODEL.HEADS.FEATURE = 'FeatureHead'
 # Normalization method for the convolution layers.
 _C.MODEL.HEADS.NORM = "BN"
 # Number of identity
@@ -119,16 +119,17 @@ _C.MODEL.LOSSES.COSFACE.GAMMA = 128
 _C.MODEL.LOSSES.COSFACE.SCALE = 1.0
 
 # Path to a checkpoint file to be loaded to the model. You can find available models in the model zoo.
-_C.MODEL.WEIGHTS = ""
-_C.MODEL.QUERYSET_TRAINED_WEIGHT = './model/query_trained.pth'
-_C.MODEL.TRAINSET_TRAINED_WEIGHT = "./model/pretrained.pth"
-_C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/adv_trained.pth"
+_C.MODEL.WEIGHTS = "./model/model_final.pth"
+_C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'
+_C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"
 
 _C.MODEL.ATTACKMETHOD=""
 _C.MODEL.DEFENSEMETHOD=""
 
 _C.TARGET = False
 _C.RAND = False
+_C.NB_R = 4
+_C.PULL = True
 # Values to be used for image normalization
 _C.MODEL.PIXEL_MEAN = [0.485*255, 0.456*255, 0.406*255]
 # Values to be used for image normalization

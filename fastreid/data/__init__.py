@@ -10,6 +10,7 @@ from .build import (
     build_reid_test_loader,
     build_reid_adv_test_loader,
     build_reid_def_adv_test_loader,
+    build_reid_def_test_loader
 )
 from .common import CommDataset
 
