@@ -88,6 +88,7 @@ class ReidEvaluator(DatasetEvaluator):
             query_features, gallery_features = aqe(query_features, gallery_features, qe_time, qe_k, alpha)
 
         dist = build_dist(query_features, gallery_features, self.cfg.TEST.METRIC)
+        print("dist = ",dist.shape)
 
         if self.cfg.TEST.RERANK.ENABLED:
             logger.info("Test with rerank setting")
@@ -111,6 +112,9 @@ class ReidEvaluator(DatasetEvaluator):
         self._results['mAP'] = mAP * 100
         self._results['mINP'] = mINP * 100
         self._results["metric"] = (mAP + cmc[0]) / 2 * 100
+        # self._results['result_order'] = result_order
+        # self._results['q_pid_save'] = q_pid_save
+        # self._results['g_pids_save'] = g_pids_save
 
         if self.cfg.TEST.ROC.ENABLED:
             scores, labels = evaluate_roc(dist, query_pids, gallery_pids, query_camids, gallery_camids)

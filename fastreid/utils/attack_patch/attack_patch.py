@@ -2,7 +2,7 @@
 #这里引用了github的项目advtorch的库
 #如想详细了解请阅读源代码
 #https://github.com/BorealisAI/advertorch
-from fastreid.utils.reid_patch import save_image,get_result,classify_test_set,Attack_algorithm_library,change_preprocess_image
+from fastreid.utils.reid_patch import evaluate_ssim, save_image,get_result,classify_test_set,Attack_algorithm_library,change_preprocess_image
 from fastreid.modeling.heads import build_feature_heads
 from fastreid.utils.advertorch.attacks import FGSM,MomentumIterativeAttack,LinfPGDAttack,CarliniWagnerL2Attack
 import torch
@@ -12,7 +12,8 @@ from fastreid.utils.attack_patch.FNA import FNA
 from fastreid.utils.attack_patch.MIS_RANKING import mis_ranking
 from fastreid.utils.attack_patch.MUAP import MUAP
 #from fastreid.utils.attack_patch import cw  
-from fastreid.utils.attack_patch.candidate_attack import CA
+from fastreid.utils.attack_patch.robrank import ROBRANK
+from fastreid.utils.attack_patch.SSAE import SSAE_attack
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 
@@ -41,7 +42,7 @@ def attack(cfg,query_data_loader,gallery_data_loader,type,pos,model_path='./mode
         attack_R(cfg, query_data_loader,gallery_data_loader,pos=pos)
         att_result = get_result(cfg,cfg.MODEL.WEIGHTS,'attack')
 
-    return att_result
+    return att_result,evaluate_ssim(cfg)
 
 
 
@@ -94,17 +95,19 @@ def attack_C(cfg,data_loader,model_path,pos='adv_query',max_batch_id=-1):
 
 def attack_R(cfg, query_data_loader,gallery_data_loader,pos):
     
+    
     model = DefaultTrainer.build_model_main(cfg)
     model.preprocess_image = change_preprocess_image(cfg) 
     model.heads = build_feature_heads(cfg)
     model.to(device)
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+    _LEGAL_ATTAKS_ = ('ES', 'QA', 'CA', 'SPQA', 'GTM', 'GTT', 'TMA', 'LTM')
 
-    adversary=match_attack_method(cfg,model,query_data_loader)
-    
     if cfg.MODEL.ATTACKMETHOD=='SMA':
+        adversary=match_attack_method(cfg,model,query_data_loader)
         SMA(query_data_loader,adversary, model,pos)
     elif cfg.MODEL.ATTACKMETHOD=='FNA':
+        adversary=match_attack_method(cfg,model,query_data_loader)
         FNA(query_data_loader,adversary, model,cfg.RAND,pos)
     elif cfg.MODEL.ATTACKMETHOD=='MIS-RANKING':
         mis_ranking(cfg,query_data_loader,pos)
@@ -114,8 +117,12 @@ def attack_R(cfg, query_data_loader,gallery_data_loader,pos):
         # batch_size of query_set to 32 instead of 64
         # or you may meet CUDA out of memory error!!!
         MUAP(cfg,query_data_loader,model,pos)
-    elif cfg.MODEL.ATTACKMETHOD=='CA':
-        CA(cfg,query_data_loader,model,pos)
+    elif cfg.MODEL.ATTACKMETHOD=='SSAE':
+        SSAE_attack(cfg,query_data_loader,pos)
+
+    elif cfg.MODEL.ATTACKMETHOD in _LEGAL_ATTAKS_ or cfg.MODEL.ATTACKMETHOD[:-1] in _LEGAL_ATTAKS_:
+        ROBRANK(cfg,query_data_loader,gallery_data_loader)
+
     else :
         raise
 
@@ -152,10 +159,6 @@ def match_attack_method(cfg,model,data_loader):
         return LinfPGDAttack(model,loss_fn=mse,eps=0.05,eps_iter=1.0/255.0,targeted=False, rand_init=True)
     elif atk_method=='FNA':
         return LinfPGDAttack(model,loss_fn=max_min_mse,eps=0.05, eps_iter=1.0/255.0,targeted=False, rand_init=False)
-    elif atk_method=='MUAP':
-        return None
-    elif atk_method=='MIS-RANKING':
-        return None
     else :
         raise KeyError("there is no attack_method you want")
 

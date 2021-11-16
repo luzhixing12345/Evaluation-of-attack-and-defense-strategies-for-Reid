@@ -23,15 +23,14 @@ def check_freezen(net, need_modified=False, after_modified=None):
 def mis_ranking(cfg,queryloader,pos):
         ### Prepare criterion ###
     
-    trainloader= get_train_set(cfg)
-    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,trainloader.dataset.num_classes)
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,queryloader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)
     model.heads = build_heads(cfg)
     model.to(device)
-    Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+    #Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
 
     
-    clf_criterion = adv_CrossEntropyLabelSmooth(num_classes=trainloader.dataset.num_classes)
+    clf_criterion = adv_CrossEntropyLabelSmooth(num_classes=queryloader.dataset.num_classes)
     metric_criterion = adv_TripletLoss(margin=0.3, ak_type=-1)
     criterionGAN = GANLoss()   
 
@@ -53,7 +52,7 @@ def mis_ranking(cfg,queryloader,pos):
     G = nn.DataParallel(G).cuda()
     D = nn.DataParallel(D).cuda()
 
-    train(cfg,G, D, model, criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, trainloader,queryloader,pos)
+    train(cfg,G, D, model, criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, queryloader,queryloader,pos)
 
     
 
@@ -62,8 +61,6 @@ def train(cfg,G, D, model, criterionGAN, clf_criterion, metric_criterion, optimi
   D.train()
 
   for idx,data in enumerate(trainloader):
-    if idx>4000:
-      break
 
     imgs = data['images'].to(device)
     pids = data['targets'].to(device)
@@ -85,10 +82,10 @@ def train(cfg,G, D, model, criterionGAN, clf_criterion, metric_criterion, optimi
     
     # Re-ID advloss
     model.train()
-    with torch.no_grad():
-      outputs= model(new_imgs)
-      new_outputs=outputs["pred_class_logits"]
-      new_features=outputs['features']
+    #with torch.no_grad():
+    outputs= model(new_imgs)
+    new_outputs=outputs["pred_class_logits"]
+    new_features=outputs['features']
 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0
     targets = None

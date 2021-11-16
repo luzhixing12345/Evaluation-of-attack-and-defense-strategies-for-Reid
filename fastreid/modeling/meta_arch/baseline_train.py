@@ -26,6 +26,33 @@ class Baseline_train(nn.Module):
 
         # head
         self.heads = build_train_heads(cfg)
+        self.loss_kwargs ={
+                    # loss name
+                    'loss_names': cfg.MODEL.LOSSES.NAME,
+
+                    # loss hyperparameters
+                    'ce': {
+                        'eps': cfg.MODEL.LOSSES.CE.EPSILON,
+                        'alpha': cfg.MODEL.LOSSES.CE.ALPHA,
+                        'scale': cfg.MODEL.LOSSES.CE.SCALE
+                    },
+                    'tri': {
+                        'margin': cfg.MODEL.LOSSES.TRI.MARGIN,
+                        'norm_feat': cfg.MODEL.LOSSES.TRI.NORM_FEAT,
+                        'hard_mining': cfg.MODEL.LOSSES.TRI.HARD_MINING,
+                        'scale': cfg.MODEL.LOSSES.TRI.SCALE
+                    },
+                    'circle': {
+                        'margin': cfg.MODEL.LOSSES.CIRCLE.MARGIN,
+                        'gamma': cfg.MODEL.LOSSES.CIRCLE.GAMMA,
+                        'scale': cfg.MODEL.LOSSES.CIRCLE.SCALE
+                    },
+                    'cosface': {
+                        'margin': cfg.MODEL.LOSSES.COSFACE.MARGIN,
+                        'gamma': cfg.MODEL.LOSSES.COSFACE.GAMMA,
+                        'scale': cfg.MODEL.LOSSES.COSFACE.SCALE
+                    }
+                }
 
     @property
     def device(self):
@@ -67,6 +94,68 @@ class Baseline_train(nn.Module):
             images = batched_inputs.to(self.device)
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
+            
         
-        images.sub(self.pixel_mean).div(self.pixel_std)
+        images.sub_(self.pixel_mean).div_(self.pixel_std)
         return images
+
+    def losses(self, outputs, gt_labels):
+        """
+        Compute loss from modeling's outputs, the loss function input arguments
+        must be the same as the outputs of the model forwarding.
+        """
+        # model predictions
+        # fmt: off
+        pred_class_logits = outputs['pred_class_logits']
+        cls_outputs       = outputs['cls_outputs']
+        pred_features     = outputs['features']
+        # fmt: on
+
+        # Log prediction accuracy
+        #log_accuracy(pred_class_logits, gt_labels)
+
+
+        loss_dict = {}
+        loss_names = self.loss_kwargs['loss_names']
+
+        # loss_fn =nn.CrossEntropyLoss()
+        # print('pred_class_logits = ',pred_class_logits)
+        # print('gt_labels =',gt_labels)
+        if 'CrossEntropyLoss' in loss_names:
+            ce_kwargs = self.loss_kwargs.get('ce')
+            loss_dict['loss_cls'] = cross_entropy_loss(
+                cls_outputs,
+                gt_labels,
+                ce_kwargs.get('eps'),
+                ce_kwargs.get('alpha')
+            ) * ce_kwargs.get('scale')
+
+        if 'TripletLoss' in loss_names:
+            tri_kwargs = self.loss_kwargs.get('tri')
+            loss_dict['loss_triplet'] = triplet_loss(
+                pred_features,
+                gt_labels,
+                tri_kwargs.get('margin'),
+                tri_kwargs.get('norm_feat'),
+                tri_kwargs.get('hard_mining')
+            ) * tri_kwargs.get('scale')
+
+        if 'CircleLoss' in loss_names:
+            circle_kwargs = self.loss_kwargs.get('circle')
+            loss_dict['loss_circle'] = pairwise_circleloss(
+                pred_features,
+                gt_labels,
+                circle_kwargs.get('margin'),
+                circle_kwargs.get('gamma')
+            ) * circle_kwargs.get('scale')
+
+        if 'Cosface' in loss_names:
+            cosface_kwargs = self.loss_kwargs.get('cosface')
+            loss_dict['loss_cosface'] = pairwise_cosface(
+                pred_features,
+                gt_labels,
+                cosface_kwargs.get('margin'),
+                cosface_kwargs.get('gamma'),
+            ) * cosface_kwargs.get('scale')
+
+        return loss_dict

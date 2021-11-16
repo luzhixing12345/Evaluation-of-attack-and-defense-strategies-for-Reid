@@ -1,11 +1,11 @@
 
 
-from fastreid.utils.attack_patch.attack_patch import attack
-from fastreid.utils.reid_patch import get_result,release_cuda_memory
-from fastreid.utils.defense_patch.adv_defense import adversarial_defense
+from fastreid.utils.reid_patch import get_result, match_type,release_cuda_memory
+from fastreid.utils.defense_patch.adv_defense import adversarial_defense_C,adversarial_defense_SMA,adversarial_defense_FNA
 from fastreid.utils.defense_patch.gra_regulation import gradient_regulation
 from fastreid.utils.defense_patch.goat import GOAT
-
+from fastreid.utils.defense_patch.distillation import distillation
+from fastreid.utils.defense_patch.robrank_defense import robrank_defense
 
 
 device = 'cuda'
@@ -27,17 +27,31 @@ def defense(cfg,train_set,query_set,gallery_set,type:bool):
         
 def defense_G(cfg,train_set):
     if cfg.MODEL.DEFENSEMETHOD=='ADV_DEF':
-        adversarial_defense(cfg,train_set)
+        if match_type(cfg,'attack'):
+            adversarial_defense_C(cfg,train_set)
+        else :
+            if cfg.MODEL.ATTACKMETHOD=='SMA':
+                adversarial_defense_SMA(cfg,train_set)
+            elif cfg.MODEL.ATTACKMETHOD=='FNA':
+                adversarial_defense_FNA(cfg,train_set)
+            else:
+                pass
         
     elif cfg.MODEL.DEFENSEMETHOD=='GRA_REG':
         gradient_regulation(cfg,train_set)
     
+    elif cfg.MODEL.DEFENSEMETHOD=='DISTILL':
+        distillation(cfg,train_set)
+        
     release_cuda_memory()
 
 
 def defense_R(cfg,train_set,query_set,gallery_set):
+    _robrank_set_ =['SES','EST','PNP']
     if cfg.MODEL.DEFENSEMETHOD=='GOAT':
         GOAT(cfg,train_set,pull=cfg.PULL,nb_r=cfg.NB_R)
+    elif cfg.MODEL.DEFENSEMETHOD in _robrank_set_:
+        robrank_defense(cfg,train_set,cfg.MODEL.DEFENSEMETHOD)
     else :
         raise 
 

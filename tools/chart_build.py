@@ -5,16 +5,18 @@ import argparse
 from openpyxl.utils import get_column_letter
 import os
 import time
-
+# import sys
+# sys.path.append('..')
+# from fastreid.utils.reid_patch import Attack_algorithm_library,Defense_algorithm_library
 excel_path = '../result.xlsx'
 save_path = '../result'
-# C_Attack_algorithm_library=["FGSM",'IFGSM','MIFGSM','CW','ODFA']  #针对分类问题的攻击算法库
-# R_Attack_algorithm_library=['SMA','FNA','MIS-RANKING']
-# Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
+C_Attack_algorithm_library=["FGSM",'IFGSM','MIFGSM','CW','ODFA']  #针对分类问题的攻击算法库
+R_Attack_algorithm_library=['SMA','FNA','MIS-RANKING','MUAP','SSAE']
+Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
 
-# G_Defense_algorithm_library=['ADV_DEF','GRA_REG']
-# R_Defense_algorithm_library=['GOAT']
-# Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_library
+G_Defense_algorithm_library=['ADV_DEF','GRA_REG','DISTILL']
+R_Defense_algorithm_library=['GOAT']
+Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_library
 
 evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
 
@@ -65,6 +67,8 @@ def generate_images(args,sheet,attack,defense):
             for a, b in zip(x, y):
                 plt.text(a, b, b, fontsize=10)
             plt.plot(x,y,label=f"{attack_method}+{defense_method}")
+            y.pop(-1)
+            y.pop(-1)
     plt.legend()
     name = time.strftime("%H:%M:%S", time.localtime())
     name = name[0:2]+'_'+name[3:5]+'_'+name[6:8]

@@ -117,71 +117,6 @@ def _test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query
         "num_query": num_query,
     }
 
-def _advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
-    if transforms is None:
-        transforms = build_transforms(cfg, is_train=False)
-
-    if test_set is None:
-        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
-        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
-        if comm.is_main_process():
-            data.show_test()
-        test_items = data.adv_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=False)
-
-        # Update query number
-        num_query = len(data.adv_query)
-
-    return {
-        "test_set": test_set,
-        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
-        "num_query": num_query,
-    }
-
-def _def_advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
-    if transforms is None:
-        transforms = build_transforms(cfg, is_train=False)
-
-    if test_set is None:
-        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
-        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
-        if comm.is_main_process():
-            data.show_test()
-        #test_items = data.def_adv_query + data.gallery
-        test_items = data.def_adv_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=False)
-
-        # Update query number
-        #num_query = len(data.def_adv_query)
-        num_query = len(data.def_adv_query)
-
-    return {
-        "test_set": test_set,
-        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
-        "num_query": num_query,
-    }
-def _def_test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
-    if transforms is None:
-        transforms = build_transforms(cfg, is_train=False)
-
-    if test_set is None:
-        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
-        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
-        if comm.is_main_process():
-            data.show_test()
-        test_items = data.def_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=False)
-
-        # Update query number
-        #num_query = len(data.def_adv_query)
-        num_query = len(data.def_query)
-
-    return {
-        "test_set": test_set,
-        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
-        "num_query": num_query,
-    }
-
 
 @configurable(from_config=_test_loader_from_config)
 def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=4):
@@ -219,6 +154,73 @@ def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=4):
         pin_memory=True,
     )
     return test_loader, num_query
+ 
+
+def _advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
+    if transforms is None:
+        transforms = build_transforms(cfg, is_train=False)
+
+    if test_set is None:
+        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
+        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+        if comm.is_main_process():
+            data.show_test()
+        test_items = data.adv_query + data.gallery
+        test_set = CommDataset(test_items, transforms, relabel=True)
+
+        # Update query number
+        num_query = len(data.adv_query)
+
+    return {
+        "test_set": test_set,
+        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
+        "num_query": num_query,
+    }
+
+def _def_advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
+    if transforms is None:
+        transforms = build_transforms(cfg, is_train=False)
+
+    if test_set is None:
+        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
+        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+        if comm.is_main_process():
+            data.show_test()
+        #test_items = data.def_adv_query + data.gallery
+        test_items = data.def_adv_query + data.gallery
+        test_set = CommDataset(test_items, transforms, relabel=True)
+
+        # Update query number
+        #num_query = len(data.def_adv_query)
+        num_query = len(data.def_adv_query)
+
+    return {
+        "test_set": test_set,
+        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
+        "num_query": num_query,
+    }
+def _def_test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query=0, transforms=None, **kwargs):
+    if transforms is None:
+        transforms = build_transforms(cfg, is_train=False)
+
+    if test_set is None:
+        assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
+        data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
+        if comm.is_main_process():
+            data.show_test()
+        test_items = data.def_query + data.gallery
+        test_set = CommDataset(test_items, transforms, relabel=True)
+
+        # Update query number
+        #num_query = len(data.def_adv_query)
+        num_query = len(data.def_query)
+
+    return {
+        "test_set": test_set,
+        "test_batch_size": cfg.TEST.IMS_PER_BATCH,
+        "num_query": num_query,
+    }
+
 
 
 @configurable(from_config=_advtest_loader_from_config)
@@ -451,7 +453,7 @@ def build_reid_att_query_data_loader(cfg, dataset_name, mapper=None, num_workers
 
 
 
-def build_reid_def_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
     """
     Build reid query data loader
 
@@ -471,7 +473,7 @@ def build_reid_def_query_data_loader(cfg, dataset_name, mapper=None, num_workers
     dataset = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
     if comm.is_main_process():
         dataset.show_test()
-    test_items = dataset.def_query
+    test_items = dataset.query +dataset.gallery
 
     if mapper is not None:
         transforms = mapper

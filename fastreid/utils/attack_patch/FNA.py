@@ -4,6 +4,7 @@ import numpy as np
 from collections import defaultdict
 from fastreid.utils.reid_patch import process_set,pairwise_distance, save_image
 
+
 def FNA(q_loader, attack, model,rand,pos,device='cuda'):
     """Perturb the queries with FNA
     

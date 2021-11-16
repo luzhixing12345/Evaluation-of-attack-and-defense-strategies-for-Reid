@@ -126,8 +126,9 @@ class Baseline(nn.Module):
             images = batched_inputs
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
-
-        images.sub(self.pixel_mean).div(self.pixel_std)
+            
+        
+        images.sub_(self.pixel_mean).div_(self.pixel_std)
         return images
 
     def losses(self, outputs, gt_labels):

@@ -119,7 +119,7 @@ _C.MODEL.LOSSES.COSFACE.GAMMA = 128
 _C.MODEL.LOSSES.COSFACE.SCALE = 1.0
 
 # Path to a checkpoint file to be loaded to the model. You can find available models in the model zoo.
-_C.MODEL.WEIGHTS = "./model/model_final.pth"
+_C.MODEL.WEIGHTS = ""
 _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'
 _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"
 

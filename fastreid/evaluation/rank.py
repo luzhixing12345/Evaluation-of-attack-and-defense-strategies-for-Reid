@@ -5,16 +5,16 @@ from collections import defaultdict
 
 import numpy as np
 
-try:
-    from .rank_cylib.rank_cy import evaluate_cy
+# try:
+#     from .rank_cylib.rank_cy import evaluate_cy
 
-    IS_CYTHON_AVAI = True
-except ImportError:
-    IS_CYTHON_AVAI = False
-    warnings.warn(
-        'Cython rank evaluation (very fast so highly recommended) is '
-        'unavailable, now use python evaluation.'
-    )
+#     IS_CYTHON_AVAI = True
+# except ImportError:
+IS_CYTHON_AVAI = False
+    # warnings.warn(
+    #     'Cython rank evaluation (very fast so highly recommended) is '
+    #     'unavailable, now use python evaluation.'
+    # )
 
 
 def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
@@ -55,6 +55,11 @@ def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         # compute cmc curve
         raw_cmc = matches[q_idx][
             keep]  # binary vector, positions with value 1 are correct matches
+        
+        if q_idx == 0:
+            result_order = indices[q_idx][keep][:max_rank]
+            q_pid_save = q_pids[q_idx]
+            g_pids_save =  g_pids[result_order]
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
             continue
@@ -93,7 +98,7 @@ def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = all_cmc.sum(0) / num_valid_q
     mAP = np.mean(all_AP)
 
-    return all_cmc, mAP
+    return all_cmc, mAP,result_order,q_pid_save,g_pids_save
 
 
 def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
@@ -102,17 +107,31 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     """
     num_q, num_g = distmat.shape
 
-    print("distmat.shape = ",distmat.shape)
-    print('q_pids = ',q_pids)
-    print('g_pids = ',g_pids)
+    #print("distmat.shape = ",distmat.shape)
+    #print('q_pids = ',q_pids.shape)#3368
+    #print('g_pids = ',g_pids.shape)#15913
     if num_g < max_rank:
         max_rank = num_g
         print('Note: number of gallery samples is quite small, got {}'.format(num_g))
 
     indices = np.argsort(distmat, axis=1) #排序,替换为对应的下标值
-    print('indices = ',indices)
+    #print('indices = ',indices.shape)#3368x15913
+    '''
+    x=np.array([[1,4,3],
+                [-1,6,9]])
+    y=np.argsort(x,axis=1)
+    [[0 2 1]
+    [0 1 2]]
 
-    matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32)
+    x=np.array([1,4,3,-1,6,9])
+    y=np.argsort(x,axis=0)
+
+    [3 0 2 1 4 5]
+    '''
+
+    matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32)#3368x15913
+    #print('matches = ',matches.shape)
+    #np.newaxis ->  create a new dimension
 
     # compute cmc curve for each query
     all_cmc = []
@@ -126,24 +145,37 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         q_camid = q_camids[q_idx]
 
         # remove gallery samples that have the same pid and camid with query
-        order = indices[q_idx]
-        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid)
+        order = indices[q_idx]#15913
+        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid)#15913
+        #print('g_pids[order] == q_pid :',g_pids[order] == q_pid)
+        #print('remove = ',remove.shape)
+        
         keep = np.invert(remove)
 
         # compute cmc curve
         raw_cmc = matches[q_idx][keep]  # binary vector, positions with value 1 are correct matches
+
+        # if q_idx == 0:
+        #     result_order = indices[q_idx][keep][:max_rank]
+        #     q_pid_save = q_pids[q_idx]
+        #     g_pids_save =  g_pids[result_order]
+        #     print('q_id = ',q_pids[q_idx])
+        #     print('g_id = ',g_pids[result_order])
+
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
             continue
 
-        cmc = raw_cmc.cumsum()
-
+        cmc = raw_cmc.cumsum()# 累加 [1,1,0,1]  -> [1,2,2,3]   
+        #print('cmc = ',cmc.shape)
+        # <15913  已经排除了相同的目标
         pos_idx = np.where(raw_cmc == 1)
         max_pos_idx = np.max(pos_idx)
         inp = cmc[max_pos_idx] / (max_pos_idx + 1.0)
         all_INP.append(inp)
 
         cmc[cmc > 1] = 1
+        #print('cmc_maxrank =',cmc[:max_rank])
 
         all_cmc.append(cmc[:max_rank])
         num_valid_q += 1.
@@ -162,12 +194,12 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = np.asarray(all_cmc).astype(np.float32)
     all_cmc = all_cmc.sum(0) / num_valid_q
 
-    return all_cmc, all_AP, all_INP
+    return all_cmc, all_AP, all_INP  #result_order,q_pid_save,g_pids_save
 
 
 def evaluate_py(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03):
     if use_metric_cuhk03:
-        return eval_cuhk03(distmat, g_pids, q_camids, g_camids, max_rank)
+        return eval_cuhk03(distmat,q_pids, g_pids, q_camids, g_camids, max_rank)
     else:
         return eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank)
 
@@ -201,6 +233,7 @@ def evaluate_rank(
             by more than 10x. This requires Cython to be installed.
     """
     if use_cython and IS_CYTHON_AVAI:
-        return evaluate_cy(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03)
+        pass
+        #return evaluate_cy(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03)
     else:
         return evaluate_py(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03)
