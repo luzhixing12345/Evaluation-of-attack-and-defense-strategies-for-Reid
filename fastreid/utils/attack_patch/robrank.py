@@ -50,30 +50,36 @@ class robrank():
         Note, all images must lie in [0,1]^D
         '''
         # prepare torche current batch of data
-        candi = self.recompute_valvecs()
-        #candi[0] -> features
-        #candi[1] -> targets
+        gallery = self.recompute_valvecs()
+        #gallery[0] -> features
+        #gallery[1] -> targets
         # XXX: this is tricky, but we need it.
 
         # initialize attacker
         advrank = AdvRank(self.model,**self.kw)
 
         iterator = None
-        if self.attack_method=='CA':
-            iterator = self.gallery_data_loader
-            pos = 'adv_gallery'
-            print('here in gallery')
-        elif self.attack_method=='QA':
+
+        if self.attack_method=='QA':
             iterator = self.query_data_loader 
             pos = 'adv_query'
-            print('here in query')
 
-        for id,data in enumerate(iterator):
-            images = (data['images']/255.0).to(device)
-            labels = data['targets'].to(device)
-            path = data['img_paths']
-            adv_data = advrank(images, labels, candi)
-            save_image(adv_data,path,pos)
+            for id,data in enumerate(iterator):
+                images = (data['images']/255.0).to(device)
+                labels = data['targets'].to(device)
+                path = data['img_paths']
+                adv_data = advrank(images, labels, gallery)
+                save_image(adv_data,path,pos)
+
+        elif self.attack_method=='CA':
+            iterator = self.gallery_data_loader
+            pos = 'adv_bounding_box_test'
+
+            for id,data in enumerate(iterator):
+                images = (data['images']/255.0).to(device)
+                labels = data['targets'].to(device)
+                path = data['img_paths']
+                advrank(images, labels, gallery)
     
     def recompute_valvecs(self):
         '''
@@ -139,12 +145,33 @@ class AdvRank:
         images = images.requires_grad_()
         labels = labels.to(self.device).view(-1)
         attack_type = self.attack_type
-        print("images = ",images.shape)
+        
 
         with torch.no_grad():
-            output_orig, dist_orig, summary_orig = self.eval_advrank(
-                images, labels, candi, resample=True)
-        
+            output, dist = self.outputdist(images, labels, candi)
+            #print('dist.shape = ',dist.shape)
+            #dist -> length of gallery set ->dist[i]: distance between the pic from query to one of gallery pics
+            #print('candi[0].shape = ',candi[0].shape)
+            #print('candi[1].shape = ',candi[1].shape)
+            # dist.shape =  torch.Size([128, 17661])
+            # candi[0].shape =  torch.Size([17661, 2048])
+            # candi[1].shape =  torch.Size([17661])
+            # successful save in datasets/DukeMTMC-reID/adv_query
+            # dist.shape =  torch.Size([128, 17661])
+            # candi[0].shape =  torch.Size([17661, 2048])
+            # candi[1].shape =  torch.Size([17661])
+            # successful save in datasets/DukeMTMC-reID/adv_query
+            # dist.shape =  torch.Size([52, 17661])
+            # candi[0].shape =  torch.Size([17661, 2048])
+            # candi[1].shape =  torch.Size([17661])
+
+            #candi[0] -> features ->candi[0][i]:batch_size(64 default)xfeatrues_shape(2048 default)
+            #candi[1] -> targets  ->candi[1][i] :batch_size(64 default)
+
+
+            #output_orig, dist_orig, summary_orig = self.eval_advrank(
+            #    images, labels, candi, resample=True)
+        self.qcsel = QCSelector(f'{self.attack_type}{self.pm}', self.M, self.W)(dist, candi)
         
         for iteration in range(self.pgditer):
             # >> prepare optimizer for SGD
@@ -768,7 +795,7 @@ class QCSelector(object):
     def _sel_caminus(self, dist, candi):
         # these are not the extremely precise topW queries but an approximation
         # select W candidates from the topmost samples
-        topmost = int(candi[0].size(0) * 0.01)
+        topmost = 10#int(candi[0].size(0) * 0.01)
         if int(os.getenv('VIS', 0)) > 0:
             topmost = int(candi[0].size(0) * 0.0003)
         topxm = dist.topk(topmost +
@@ -807,7 +834,7 @@ class QCSelector(object):
         M_GT = self.M_GT
         M = self.M
         # random sampling from top-3M for QA-
-        topmost = int(candi[0].size(0) * 0.01)
+        topmost = 10#int(candi[0].size(0) * 0.01)
         if int(os.getenv('VIS', 0)) > 0:
             topmost = int(candi[0].size(0) * 0.0003)
         topxm = dist.topk(topmost + 1, dim=1, largest=False)[1][:, 1:]
@@ -930,8 +957,6 @@ class AdvRankLoss(object):
         #print('(debug)', 'rank=', statistics.mean(refrank))
         loss = torch.stack(losses).mean()
         rank = statistics.mean(ranks) if DO_RANK else None
-        print('loss = ',loss)
-        print('rank = ',rank)
         return (loss, rank)
 
     def RankLossQueryAttackDistance(self, qs: torch.Tensor, Cs: torch.Tensor, Xs: torch.Tensor, *,

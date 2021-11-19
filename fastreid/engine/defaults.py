@@ -500,7 +500,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -516,7 +516,7 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i
+        return results_i,result_to_save
 
     @classmethod
     def advtest(cls, cfg, model):
@@ -540,7 +540,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -556,7 +556,7 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i
+        return results_i,result_to_save
     
     @classmethod
     def def_advtest(cls, cfg, model):
@@ -580,7 +580,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -596,47 +596,8 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i
+        return results_i,result_to_save
 
-    @classmethod
-    def def_test(cls, cfg, model):
-        """
-        Args:
-            cfg (CfgNode):
-            model (nn.Module):
-        Returns:
-            dict: a dict of result metrics
-        """
-        logger = logging.getLogger(__name__)
-
-        results = OrderedDict()
-        for idx, dataset_name in enumerate(cfg.DATASETS.TESTS):
-            logger.info("Prepare testing set")
-            try:
-                data_loader, evaluator = cls.build_def_evaluator(cfg, dataset_name)
-            except NotImplementedError:
-                logger.warn(
-                    "No evaluator found. implement its `build_evaluator` method."
-                )
-                results[dataset_name] = {}
-                continue
-            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
-            results[dataset_name] = results_i
-
-            if comm.is_main_process():
-                assert isinstance(
-                    results, dict
-                ), "Evaluator must return a dict on the main process. Got {} instead.".format(
-                    results
-                )
-                logger.info("Evaluation results for {} in csv format:".format(dataset_name))
-                results_i['dataset'] = dataset_name
-                print_csv_format(results_i)
-
-        if len(results) == 1:
-            results = list(results.values())[0]
-
-        return results_i
 
     @staticmethod
     def auto_scale_hyperparams(cfg, num_classes):

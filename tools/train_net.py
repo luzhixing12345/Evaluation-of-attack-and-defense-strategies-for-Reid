@@ -53,29 +53,34 @@ def main(args):
     # and add your own computing method and indicator in it 
 
     # we will totally record four results as below
-    pure_result = None
-    att_result = None
-    def_result = None
-    def_adv_result = None    
+    pure_result=pure_result_to_save=None
+    att_result=att_result_to_save=None
+    def_result=def_result_to_save=None
+    def_adv_result=def_adv_result_to_save=None  
     # the model positions have been already defined in fastreid\config\defaults.py 
     # _C.MODEL.WEIGHTS                = "./model/model_final.pth"       the origin model after training 
     # _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'      the model that can classify well in query set
     # _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"       the model that can defense well towards the attack method
 
-    pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
+
+    # market1501  pic    target                  DukeMTMC   pic     target
+    # query      3368    750                     query      2228    702
+    # gallery   15913    751                     gallery    17661   1110
+    pure_result ,pure_result_to_save= get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
 
     if args.attack:
         print('start attack')
-        att_result,SSIM= attack(cfg,query_set,gallery_set,match_type(cfg,'attack'),pos='adv_query')
+        att_result,att_result_to_save,SSIM= attack(cfg,query_set,gallery_set,match_type(cfg,'attack'),pos='adv_query')
+        print('ssim = ',SSIM)
 
     if args.defense:
         print('start defense')
-        def_result, def_adv_result = defense(cfg,train_set,query_set,gallery_set,match_type(cfg,'defense'))
+        def_result,def_result_to_save, def_adv_result,def_adv_result_to_save = defense(cfg,train_set,query_set,gallery_set,match_type(cfg,'defense'))
 
     if args.record:
         record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM)
         print('the results were recorded in the excel in the root path')
-    #record_order(cfg,pure_result,query_set,gallery_set)
+    record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save)
     
     
     print("You have finished all the jobs !")

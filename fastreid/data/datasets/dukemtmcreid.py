@@ -37,9 +37,8 @@ class DukeMTMC(ImageDataset):
         self.dataset_dir = osp.join(self.root, self.dataset_dir)
         self.train_dir = osp.join(self.dataset_dir, 'bounding_box_train')
         self.query_dir = osp.join(self.dataset_dir, 'query')
-        self.def_query_dir = osp.join(self.dataset_dir, 'def_query')
         self.adv_query_dir = osp.join(self.dataset_dir, 'adv_query')
-        self.def_adv_query_dir = osp.join(self.dataset_dir, 'def_adv_query')
+        self.adv_gallery_dir = osp.join(self.dataset_dir, 'adv_bounding_box_test')
         self.gallery_dir = osp.join(self.dataset_dir, 'bounding_box_test')
 
         required_files = [
@@ -52,12 +51,11 @@ class DukeMTMC(ImageDataset):
 
         train = self.process_dir(self.train_dir)
         query = self.process_dir(self.query_dir, is_train=False)
-        def_query = self.process_dir(self.def_query_dir, is_train=False)
         adv_query = self.process_dir(self.adv_query_dir, is_train=False)
-        def_adv_query = self.process_dir(self.def_adv_query_dir, is_train=False)
+        adv_gallery = self.process_dir(self.adv_gallery_dir, is_train=False)
         gallery = self.process_dir(self.gallery_dir, is_train=False)
 
-        super(DukeMTMC, self).__init__(train, query, gallery,adv_query,def_adv_query, def_query,**kwargs)
+        super(DukeMTMC, self).__init__(train, query, gallery,adv_query,adv_gallery,**kwargs)
 
     def process_dir(self, dir_path, is_train=True):
         img_paths = glob.glob(osp.join(dir_path, '*.jpg'))

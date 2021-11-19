@@ -50,8 +50,8 @@ class Market1501(ImageDataset):
         self.query_dir = osp.join(self.data_dir, 'query')
         self.def_query_dir = osp.join(self.data_dir, 'def_query')
         self.adv_query_dir=osp.join(self.data_dir, 'adv_query')      #导入adv_query地址
-        self.def_adv_query_dir=osp.join(self.data_dir, 'def_adv_query')      #导入def_adv_query地址
         self.gallery_dir = osp.join(self.data_dir, 'bounding_box_test')
+        self.adv_gallery_dir = osp.join(self.data_dir,'adv_bounding_box_test')
         self.extra_gallery_dir = osp.join(self.data_dir, 'images')
         self.market1501_500k = market1501_500k
 
@@ -67,14 +67,13 @@ class Market1501(ImageDataset):
 
         train = self.process_dir(self.train_dir)
         query = self.process_dir(self.query_dir, is_train=False)
-        def_query = self.process_dir(self.def_query_dir, is_train=False)
         adv_query = self.process_dir(self.adv_query_dir, is_train=False)
-        def_adv_query = self.process_dir(self.def_adv_query_dir,is_train=False)
         gallery = self.process_dir(self.gallery_dir, is_train=False)
+        adv_gallery =  self.process_dir(self.adv_gallery_dir,is_train=False)
         if self.market1501_500k:
             gallery += self.process_dir(self.extra_gallery_dir, is_train=False)
 
-        super(Market1501, self).__init__(train, query, gallery, adv_query,def_adv_query,def_query,**kwargs)
+        super(Market1501, self).__init__(train, query, gallery, adv_query,adv_gallery,**kwargs)
 
     def process_dir(self, dir_path, is_train=True):
         img_paths = glob.glob(osp.join(dir_path, '*.jpg'))

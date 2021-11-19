@@ -166,7 +166,7 @@ def _advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_qu
         if comm.is_main_process():
             data.show_test()
         test_items = data.adv_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=True)
+        test_set = CommDataset(test_items, transforms, relabel=False)
 
         # Update query number
         num_query = len(data.adv_query)
@@ -360,7 +360,7 @@ def fast_batch_collator(batched_inputs):
     elif isinstance(elem, string_classes):
         return batched_inputs
 
-def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=True,**kwargs):
     """
     Build reid query data loader
 
@@ -388,7 +388,7 @@ def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,*
     else:
         transforms = build_transforms(cfg, is_train=False)
 
-    test_set = CommDataset(test_items, transforms, relabel=True)
+    test_set = CommDataset(test_items, transforms, relabel=relabel)
 
     mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
     data_sampler = samplers.InferenceSampler(len(test_set))
@@ -434,7 +434,7 @@ def build_reid_att_query_data_loader(cfg, dataset_name, mapper=None, num_workers
     else:
         transforms = build_transforms(cfg, is_train=False)
 
-    test_set = CommDataset(test_items, transforms, relabel=True)
+    test_set = CommDataset(test_items, transforms, relabel=False)
 
     mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
     data_sampler = samplers.InferenceSampler(len(test_set))
@@ -453,7 +453,7 @@ def build_reid_att_query_data_loader(cfg, dataset_name, mapper=None, num_workers
 
 
 
-def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel = True,**kwargs):
     """
     Build reid query data loader
 
@@ -480,7 +480,7 @@ def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**
     else:
         transforms = build_transforms(cfg, is_train=False)
 
-    test_set = CommDataset(test_items, transforms, relabel=True)
+    test_set = CommDataset(test_items, transforms, relabel=relabel)
 
     mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
     data_sampler = samplers.InferenceSampler(len(test_set))
@@ -497,7 +497,7 @@ def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**
     )
     return test_loader
 
-def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4,**kwargs):
+def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=True,**kwargs):
     """
     Build reid query data loader
 
@@ -524,7 +524,7 @@ def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4
     else:
         transforms = build_transforms(cfg, is_train=False)
 
-    test_set = CommDataset(test_items, transforms, relabel=True)
+    test_set = CommDataset(test_items, transforms, relabel=relabel)
 
     mini_batch_size = cfg.TEST.IMS_PER_BATCH // comm.get_world_size()
     data_sampler = samplers.InferenceSampler(len(test_set))

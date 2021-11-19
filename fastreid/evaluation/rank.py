@@ -41,6 +41,9 @@ def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = []
     all_AP = []
     num_valid_q = 0.  # number of valid query
+    result_order = []
+    q_pid_save = []
+    g_pids_save = []
 
     for q_idx in range(num_q):
         # get query pid and camid
@@ -56,10 +59,10 @@ def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         raw_cmc = matches[q_idx][
             keep]  # binary vector, positions with value 1 are correct matches
         
-        if q_idx == 0:
-            result_order = indices[q_idx][keep][:max_rank]
-            q_pid_save = q_pids[q_idx]
-            g_pids_save =  g_pids[result_order]
+        if q_idx < max_rank:
+            result_order.append(indices[q_idx][keep][:max_rank])
+            q_pid_save.append(q_pids[q_idx])
+            g_pids_save.append(g_pids[result_order])
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
             continue
@@ -98,7 +101,7 @@ def eval_cuhk03(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = all_cmc.sum(0) / num_valid_q
     mAP = np.mean(all_AP)
 
-    return all_cmc, mAP,result_order,q_pid_save,g_pids_save
+    return all_cmc, all_AP,0,result_order,q_pid_save,g_pids_save
 
 
 def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
@@ -138,6 +141,9 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_AP = []
     all_INP = []
     num_valid_q = 0.  # number of valid query
+    result_order = []
+    q_pid_save = []
+    g_pids_save = []
 
     for q_idx in range(num_q):
         # get query pid and camid
@@ -155,12 +161,10 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         # compute cmc curve
         raw_cmc = matches[q_idx][keep]  # binary vector, positions with value 1 are correct matches
 
-        # if q_idx == 0:
-        #     result_order = indices[q_idx][keep][:max_rank]
-        #     q_pid_save = q_pids[q_idx]
-        #     g_pids_save =  g_pids[result_order]
-        #     print('q_id = ',q_pids[q_idx])
-        #     print('g_id = ',g_pids[result_order])
+        if q_idx < max_rank:
+            result_order.append(indices[q_idx][keep][:max_rank].tolist())
+            q_pid_save.append(q_pids[q_idx])
+            g_pids_save.append(g_pids[result_order[q_idx]].tolist())
 
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
@@ -194,7 +198,7 @@ def eval_market1501(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = np.asarray(all_cmc).astype(np.float32)
     all_cmc = all_cmc.sum(0) / num_valid_q
 
-    return all_cmc, all_AP, all_INP  #result_order,q_pid_save,g_pids_save
+    return all_cmc, all_AP, all_INP  ,result_order,q_pid_save,g_pids_save
 
 
 def evaluate_py(distmat, q_pids, g_pids, q_camids, g_camids, max_rank, use_metric_cuhk03):

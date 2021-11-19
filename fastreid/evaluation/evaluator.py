@@ -153,13 +153,13 @@ def inference_on_dataset(model, data_loader, evaluator, flip_test=False):
             total_compute_time_str, total_compute_time / (total - num_warmup), num_devices
         )
     )
-    results = evaluator.evaluate()
+    results,result_to_save = evaluator.evaluate()
 
     # An evaluator may return None when not in main process.
     # Replace it by an empty dict instead to make it easier for downstream code to handle
     if results is None:
         results = {}
-    return results
+    return results,result_to_save
 
 
 @contextmanager

@@ -20,10 +20,10 @@ def defense(cfg,train_set,query_set,gallery_set,type:bool):
     else :
         defense_R(cfg,train_set,query_set,gallery_set)
         
-    def_result= get_result(cfg,cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'defense')
-    def_adv_result= get_result(cfg,cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'attack')
+    def_result,def_result_to_save= get_result(cfg,cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'defense')
+    def_adv_result,def_adv_result_to_save= get_result(cfg,cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'attack')
 
-    return def_result,def_adv_result
+    return def_result,def_result_to_save,def_adv_result,def_adv_result_to_save
         
 def defense_G(cfg,train_set):
     if cfg.MODEL.DEFENSEMETHOD=='ADV_DEF':

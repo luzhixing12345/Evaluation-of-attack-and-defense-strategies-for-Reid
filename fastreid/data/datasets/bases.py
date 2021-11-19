@@ -30,14 +30,13 @@ class Dataset(object):
     """
     _junk_pids = []  # contains useless person IDs, e.g. background, false detections
 
-    def __init__(self, train, query, gallery, adv_query,def_adv_query,def_query,transform=None, mode='train',
+    def __init__(self, train, query, gallery, adv_query,adv_gallery,transform=None, mode='train',
                  combineall=False, verbose=True, **kwargs):
         self.train = train
         self.query = query
         self.gallery = gallery
         self.adv_query = adv_query
-        self.def_adv_query = def_adv_query
-        self.def_query = def_query
+        self.adv_gallery = adv_gallery
         self.transform = transform
         self.mode = mode
         self.combineall = combineall
@@ -137,8 +136,8 @@ class ImageDataset(Dataset):
     data in each batch has shape (batch_size, channel, height, width).
     """
 
-    def __init__(self, train, query, gallery, adv_query,def_adv_query,def_query,**kwargs):
-        super(ImageDataset, self).__init__(train, query, gallery, adv_query,def_adv_query,def_query,**kwargs)
+    def __init__(self, train, query, gallery, adv_query,adv_gallery,**kwargs):
+        super(ImageDataset, self).__init__(train, query, gallery, adv_query,adv_gallery,**kwargs)
 
     def show_train(self):
         num_train_pids, num_train_cams = self.parse_data(self.train)

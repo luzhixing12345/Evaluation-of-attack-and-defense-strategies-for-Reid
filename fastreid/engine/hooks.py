@@ -354,11 +354,12 @@ class EvalHook(HookBase):
                 try:
                     v = float(v)
                 except Exception:
+                    continue
                     raise ValueError(
                         "[EvalHook] eval_function should return a nested dict of float. "
                         "Got '{}: {}' instead.".format(k, v)
                     )
-            self.trainer.storage.put_scalars(**flattened_results, smoothing_hint=False)
+            #self.trainer.storage.put_scalars(**flattened_results, smoothing_hint=False)
 
         torch.cuda.empty_cache()
         # Evaluation may take different time among workers.

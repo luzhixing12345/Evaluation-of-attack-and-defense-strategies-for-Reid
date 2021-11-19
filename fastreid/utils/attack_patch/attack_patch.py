@@ -37,12 +37,12 @@ def attack(cfg,query_data_loader,gallery_data_loader,type,pos,model_path='./mode
         print('finished the train for test set ')
         print('---------------------------------------------')
         attack_C(cfg, query_data_loader,model_path,pos=pos)
-        att_result = get_result(cfg,cfg.MODEL.WEIGHTS,'attack')
+        att_result,att_result_to_save = get_result(cfg,cfg.MODEL.WEIGHTS,'attack')
     else:  # 针对排序问题的攻击
         attack_R(cfg, query_data_loader,gallery_data_loader,pos=pos)
-        att_result = get_result(cfg,cfg.MODEL.WEIGHTS,'attack')
+        att_result,att_result_to_save = get_result(cfg,cfg.MODEL.WEIGHTS,'attack')
 
-    return att_result,evaluate_ssim(cfg)
+    return att_result,att_result_to_save,evaluate_ssim(cfg)
 
 
 

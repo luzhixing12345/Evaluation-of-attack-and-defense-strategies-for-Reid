@@ -1,15 +1,17 @@
 
 import enum
+import time
 import os
-from sys import prefix
+import shutil
+from numpy.core.numeric import correlate
 import openpyxl
 import torch
 import torch.nn as nn
 from fastreid.data.build import (build_reid_test_data_loader,
                                  build_reid_query_data_loader,
                                  build_reid_att_query_data_loader,
-                                 build_reid_gallery_data_loader,
-                                 build_reid_train_loader)
+                                 build_reid_gallery_data_loader, build_reid_test_loader,
+                                 build_reid_train_loader, fast_batch_collator)
 from fastreid.engine import DefaultTrainer
 from fastreid.solver.build import build_optimizer
 from fastreid.utils.checkpoint import Checkpointer
@@ -18,6 +20,7 @@ from torchvision import transforms
 from skimage import transform 
 import skimage
 import skimage.io as io
+from fastreid.engine import DefaultTrainer
 
 device= 'cuda'
 excel_name = 'result.xlsx'
@@ -34,20 +37,20 @@ evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
 evaluation_attackIndex=['mAP','1-SSIM','index']
 num=len(evaluation_indicator)
 
-def get_query_set(cfg):
-    query_set=build_reid_query_data_loader(cfg,cfg.DATASETS.TESTS[0])
+def get_query_set(cfg,relabel=True):
+    query_set=build_reid_query_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return query_set
 
-def get_att_query_set(cfg):
-    adv_query_set = build_reid_att_query_data_loader(cfg,cfg.DATASETS.TESTS[0])
+def get_att_query_set(cfg,relabel=True):
+    adv_query_set = build_reid_att_query_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return adv_query_set
 
-def get_test_set(cfg):
-    test_set = build_reid_test_data_loader(cfg,cfg.DATASETS.TESTS[0])
+def get_test_set(cfg,relabel=True):
+    test_set = build_reid_test_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return test_set
 
-def get_gallery_set(cfg):
-    gallery_set=build_reid_gallery_data_loader(cfg,cfg.DATASETS.TESTS[0])
+def get_gallery_set(cfg,relabel=True):
+    gallery_set=build_reid_gallery_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return gallery_set
 
 def get_train_set(cfg):
@@ -185,7 +188,7 @@ def change_preprocess_image(cfg):
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
         
         
-        images = images * 255.0
+        images = torch.mul(images,255)
         images.sub_(torch.tensor(cfg.MODEL.PIXEL_MEAN).view(1, -1, 1, 1).to(device)).div_(torch.tensor(cfg.MODEL.PIXEL_STD).view(1, -1, 1, 1).to(device))
         return images
     return preprocess_image
@@ -200,14 +203,14 @@ def get_result(cfg,model_path,step:str)->dict:
     model =DefaultTrainer.build_model(cfg)  # 启用baseline,用于测评
     Checkpointer(model).load(model_path)
     if step=='attack':
-        result = DefaultTrainer.advtest(cfg,model)# advtest用于测试adv_query与gallery合成的test_set
+        result ,result_to_save= DefaultTrainer.advtest(cfg,model)# advtest用于测试adv_query与gallery合成的test_set
     elif step=='pure' or step=='defense':
-        result = DefaultTrainer.test(cfg,model)# test用于测试query与gallery合成的test_set
+        result ,result_to_save= DefaultTrainer.test(cfg,model)# test用于测试query与gallery合成的test_set
     elif step =='def-attack':
-        result = DefaultTrainer.def_advtest(cfg,model)# def-advtest用于测试def-adv_query与gallery合成的test_set
+        result ,result_to_save= DefaultTrainer.def_advtest(cfg,model)# def-advtest用于测试def-adv_query与gallery合成的test_set
     else:
         raise KeyError('you must choose the step to select the correct dataset of query and gallery for evaluation.')
-    return result
+    return result,result_to_save
 
 
 
@@ -351,48 +354,128 @@ def pairwise_distance(x, y):
 def mkdir(path):
     folder = os.path.exists(path)
     if not folder:
-        os.makedirs(path+"/origin") 
-        os.makedirs(path+"/attack") 
-        os.makedirs(path+"/defense") 
         print("dirtory "+path+" has been created")
     else:
-        return
+        if os.path.exists(path+'/origin'):
+            shutil.rmtree(path+"/origin")
+        if os.path.exists(path+'/attack'):
+            shutil.rmtree(path+"/attack")
+        if os.path.exists(path+'/defense'):
+            shutil.rmtree(path+"/defense")
+        if os.path.exists(path+'/adv_defense'):
+            shutil.rmtree(path+"/adv_defense")
+    os.makedirs(path+"/origin") 
+    os.makedirs(path+"/attack") 
+    os.makedirs(path+"/defense")
+    os.makedirs(path+"/adv_defense")
 
 
-def record_order(cfg,pure_result,query_set,gallery_set):
-    result_order = pure_result['result_order']
-    q_pid_save   = pure_result['q_pid_save']
-    g_pids_save  = pure_result['g_pids_save']
+def record_order(cfg,pure_result,att_result,def_result,def_adv_result):
+    query_set = get_query_set(cfg,relabel=False)
+    gallery_set = get_gallery_set(cfg,relabel=False)
+    # test_dataset,num_query = DefaultTrainer.build_test_loader(cfg,dataset_name=cfg.DATASETS.NAMES[0])
+    # images = []
+    # pids = []
+    # camids = []
+    batch_size = cfg.TEST.IMS_PER_BATCH
+    gallery_images = []
+    gallery_targets = []
+    for _ ,data in enumerate(gallery_set):
+        gallery_images.append(data['images'].cpu()/255.0)
+        gallery_targets.append(data['targets'])
+    # print('batch size = ',batch_size)
+    # print('num_query = ',num_query)
+
+    # for _,data in enumerate(test_dataset):
+    #     images.append((data['images']/255.0).cpu())
+    #     pids.append(data['targets'].cpu())
+    #     camids.append(data['camids'].cpu())
+    
+    # images = torch.cat(images,dim=0)
+    # pids = torch.cat(pids, dim=0)
+    # camids = torch.cat(camids,dim=0)
+
+    # query_images = images[:num_query]
+    # query_pids = pids[:num_query]
+
+    # gallery_images = images[num_query:]
+    # gallery_pids = pids[num_query:]
+
+    result_order = {}
+    q_pid_save = {}
+    g_pids_save = {}
+    for name,dict in {'origin':pure_result,'attack':att_result,'defense':def_result,'adv_defense':def_adv_result}.items():
+        result_order[name]=[]
+        q_pid_save[name]=None
+        g_pids_save[name]=[]
+        if dict!=None:
+            for key,list in {'result_order':result_order,'q_pid_save':q_pid_save,'g_pids_save':g_pids_save}.items():
+                list[name]=dict[key]
+
+    pictureNumber = 50  #the same as 'max_rank' in engine/evaluation/rank.py  -> function(eval_cuhk/eval_market1501)
+
     path = os.getcwd()+'/logs_pic/'+cfg.DATASETS.NAMES[0]+'/'+cfg.MODEL.ATTACKMETHOD+'_'+cfg.MODEL.DEFENSEMETHOD
     mkdir(path)
-    toPIL = transforms.ToPILImage()
-    for idx,data in enumerate(query_set):
-        img = data['images'][0].cpu()/255
-        target = data['targets'][0].cpu()
-        toPIL(img).save(path+'/'+str(target.item())+'.jpg')
-        if target.item()==q_pid_save:
-            print("yes!!!!")
-        else :
-            print("target =",target)
-            print('q_pid_save = ',q_pid_save)
-        break
-    
-    batch_size = cfg.TEST.IMS_PER_BATCH
-    gallery_img = []
-    gallery_target = []
-    for idx,data in enumerate(gallery_set):
-        img = data['images'].cpu()/255
-        target = data['targets'].cpu()
-        gallery_img.append(img)
-        gallery_target.append(target)
-    
-    s=0
-    for id in result_order:
-        toPIL(gallery_img[id//batch_size][id%batch_size]).save(path+'/origin/'+str(s)+'_'+str(gallery_target[id//batch_size][id%batch_size].item())+'.jpg')
-        if gallery_target[id//batch_size][id%batch_size].item()==g_pids_save[s]:
-            print('ohhhhh')
+    file = open(path+"/log.txt",'a')# write from the end of the txt,so it will record all your jobs
+    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
+    time_info = time.asctime( time.localtime(time.time()))
+    file.write("the log time is "+time_info+"\n") 
+    for name in ('origin','attack','defense'):
+        file.write('-------------------------------------------------------\n')
+        file.write(f'in {name} \n')
+        file.write('-------------------------------------------------------\n')
+        if q_pid_save[name]==None:
+            file.write(f'no result from {name}\n')
         else:
-            print(gallery_img[id//batch_size][id%batch_size].item())
-            print(g_pids_save[s])
-        s+=1
+            file.write('query pid = ')
+            for i in range(pictureNumber):
+                file.write(f'{q_pid_save[name][i]} ')
+            file.write('\n')
+            for i in range(pictureNumber):
+                file.write("corresponding target :")
+                for j in range(pictureNumber):
+                    if g_pids_save[name][i][j]==q_pid_save[name][i]:
+                        file.write(' 1')
+                    else:
+                        file.write(' 0')
+                file.write('\n')
+            for i in range(pictureNumber):
+                file.write("gallery pids = ")
+                for j in range(pictureNumber):
+                    file.write(str(g_pids_save[name][i][j])+' ')
+                file.write('\n')
+            file.write('\n')
+    file.write('\nlog over\n')
+    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
+    file.close()
+    print("log over")
+    #start to save pictures
+    # toPIL = transforms.ToPILImage()
+
+    # for name,pos in result_order.items():
+    #     print(f'start to save pictures of query&gallery set of {name}')
+    #     for _,data in enumerate(query_set):
+    #         for i in range(pictureNumber):
+    #             img = (data['images'].cpu()/255.0)[i]
+    #             target = data['targets'][i].item()
+    #             os.makedirs(f'{path}/{name}/{i}')
+    #             toPIL(img).save(f'{path}/{name}/{i}/q_{target}.jpg')
+    #             if q_pid_save[name]==None:
+    #                 continue
+    #             if target!=q_pid_save[name][i]:
+    #                 print("target =",target)
+    #                 print('q_pid_save = ',q_pid_save[name][i])
+    #         break
+    #     print('query set pictures are all saved ')
+    #     if pos==[]:
+    #         continue
+    #     for i in range(pictureNumber):
+    #         for j in range(pictureNumber):
+    #             toPIL(gallery_images[pos[i][j]//batch_size][pos[i][j]%batch_size]).save(f'{path}/{name}/{i}/{j}_{gallery_targets[pos[i][j]//batch_size][pos[i][j]%batch_size].item()}.jpg')
+    #             if gallery_targets[pos[i][j]//batch_size][pos[i][j]%batch_size].item()!=g_pids_save[name][i][j]:
+    #                 print("target =",gallery_targets[pos[i][j]//batch_size][pos[i][j]%batch_size].item())
+    #                 print('g_pid_save = ',g_pids_save[name][i][j])
+
+    #     print('gallery set pictures are all saved')
+
     

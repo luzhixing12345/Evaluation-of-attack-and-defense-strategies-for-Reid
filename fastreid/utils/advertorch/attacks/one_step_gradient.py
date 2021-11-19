@@ -64,7 +64,6 @@ class GradientSignAttack(Attack, LabelMixin):
         xadv = x.requires_grad_()
         logits = self.predict(xadv)
         loss = self.loss_fn(logits,y)
-        print('loss = ',loss)
         if self.targeted:
             loss = -loss
         loss.backward()
@@ -123,7 +122,6 @@ class GradientAttack(Attack, LabelMixin):
         outputs = self.predict(xadv)
 
         loss = self.loss_fn(outputs, y)
-        print('loss = ',loss)
         if self.targeted:
             loss = -loss
         loss.backward()
