@@ -153,20 +153,13 @@ class AdvRank:
             #dist -> length of gallery set ->dist[i]: distance between the pic from query to one of gallery pics
             #print('candi[0].shape = ',candi[0].shape)
             #print('candi[1].shape = ',candi[1].shape)
+
             # dist.shape =  torch.Size([128, 17661])
-            # candi[0].shape =  torch.Size([17661, 2048])
-            # candi[1].shape =  torch.Size([17661])
-            # successful save in datasets/DukeMTMC-reID/adv_query
-            # dist.shape =  torch.Size([128, 17661])
-            # candi[0].shape =  torch.Size([17661, 2048])
-            # candi[1].shape =  torch.Size([17661])
-            # successful save in datasets/DukeMTMC-reID/adv_query
-            # dist.shape =  torch.Size([52, 17661])
             # candi[0].shape =  torch.Size([17661, 2048])
             # candi[1].shape =  torch.Size([17661])
 
-            #candi[0] -> features ->candi[0][i]:batch_size(64 default)xfeatrues_shape(2048 default)
-            #candi[1] -> targets  ->candi[1][i] :batch_size(64 default)
+            #candi[0] -> features ->candi[0][i]:batch_size x featrues_shape(2048 default)
+            #candi[1] -> targets  ->candi[1][i]:batch_size
 
 
             #output_orig, dist_orig, summary_orig = self.eval_advrank(
@@ -806,53 +799,27 @@ class QCSelector(object):
         return (embpairs, msample)
 
     def _sel_qaplus(self, dist, candi):
-        M_GT = self.M_GT
         M = self.M
         # random sampling from populationfor QA+
-        if 'global' == os.getenv('SAMPLE', 'global'):
-            msample = torch.randint(
-                candi[0].shape[0], (dist.shape[0], M))  # [output_0,M]
-        elif 'local' == os.getenv('SAMPLE', 'global'):
-            local_lb = int(candi[0].shape[0] * 0.01)
-            local_ub = int(candi[0].shape[0] * 0.05)
-            topxm = dist.topk(local_ub + 1, dim=1, largest=False)[1][:, 1:]
-            sel = np.random.randint(local_lb, local_ub, (dist.shape[0], M))
-            msample = torch.stack([topxm[i][sel[i]]
-                                for i in range(topxm.shape[0])])
+        msample = torch.randint(candi[0].shape[0], (dist.shape[0], M))  # [output_0,M]
+
         embpairs = candi[0][msample, :]
-        if self.SP:
-            mgtruth = dist.topk(
-                M_GT + 1, dim=1, largest=False)[1][:, 1:]  # [output_0, M]
-            embgts = candi[0][mgtruth, :]
-        # return the selections
-        if self.SP:
-            return (embpairs, msample, embgts, mgtruth)
-        else:
-            return (embpairs, msample)
+
+        return (embpairs, msample)
 
     def _sel_qaminus(self, dist, candi) -> tuple:
-        M_GT = self.M_GT
         M = self.M
         # random sampling from top-3M for QA-
-        topmost = 10#int(candi[0].size(0) * 0.01)
-        if int(os.getenv('VIS', 0)) > 0:
-            topmost = int(candi[0].size(0) * 0.0003)
+        topmost = 10    #int(candi[0].size(0) * 0.01)
+
         topxm = dist.topk(topmost + 1, dim=1, largest=False)[1][:, 1:]
         sel = np.vstack([np.random.permutation(topmost)
                          for i in range(dist.shape[0])])
         msample = torch.stack([topxm[i][sel[i, :M]]
                             for i in range(topxm.shape[0])])
-        if self.SP:
-            mgtruth = torch.stack([topxm[i][np.sort(sel[i, M:])[:M_GT]]
-                                for i in range(topxm.shape[0])])
         embpairs = candi[0][msample, :]
-        if self.SP:
-            embgts = candi[0][mgtruth, :]
-        # return selections
-        if self.SP:
-            return (embpairs, msample, embgts, mgtruth)
-        else:
-            return (embpairs, msample)
+
+        return (embpairs, msample)
 
     def _sel_tma(self, dist, candi) -> tuple:
         # random sampling is enough. -- like QA+

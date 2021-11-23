@@ -80,7 +80,7 @@ def main(args):
     if args.record:
         record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM)
         print('the results were recorded in the excel in the root path')
-    record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save)
+    #record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save)
     
     
     print("You have finished all the jobs !")

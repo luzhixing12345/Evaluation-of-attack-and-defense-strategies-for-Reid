@@ -124,7 +124,9 @@ _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'
 _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"
 
 _C.MODEL.ATTACKMETHOD=""
+_C.MODEL.ATTACKTYPE ="QA+"
 _C.MODEL.DEFENSEMETHOD=""
+
 
 _C.TARGET = False
 _C.RAND = False
@@ -322,3 +324,4 @@ _C.OUTPUT_DIR = "logs/"
 # for about 10k iterations. It usually hurts total time, but can benefit for certain models.
 # If input images have the same or similar sizes, benchmark is often helpful.
 _C.CUDNN_BENCHMARK = False
+

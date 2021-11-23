@@ -24,7 +24,10 @@ device = 'cuda'
 # Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
 
 def attack(cfg,query_data_loader,gallery_data_loader,type,pos,model_path='./model/test_trained.pth'):
-
+        # test_dataset,num_query = DefaultTrainer.build_test_loader(cfg,dataset_name=cfg.DATASETS.NAMES[0])
+    # images = []
+    # pids = []
+    # camids = []
     if type:  # 针对分类问题的攻击
         classify_test_set(cfg, query_data_loader)
         # 设计分类器，能够完成query_set的image到target的对应,没有完成gallery_set的对应
