@@ -7,7 +7,7 @@
 import sys
 
 sys.path.append('.')
-from fastreid.utils.reid_patch import evaluate_ssim, get_gallery_set, get_query_set, get_train_set, record,get_result, record_order, release_cuda_memory
+from fastreid.utils.reid_patch import get_gallery_set, get_query_set, get_train_set, print_configCondition, print_info,record,get_result, record_order
 from fastreid.utils.attack_patch.attack_patch import attack
 from fastreid.utils.defense_patch.defense_patch import defense
 from fastreid.utils.reid_patch import match_type
@@ -15,7 +15,7 @@ from fastreid.engine import DefaultTrainer, default_argument_parser, default_set
 from fastreid.config import get_cfg
 
 
-
+attack_type = ['QA+','QA-','GA+','GA-']
 
 
 def setup(args):
@@ -25,8 +25,21 @@ def setup(args):
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    
+    if args.attack!=None:
+        assert len(args.attack)>=5,"--attack arguments should follow with attackType:attackMethod "
+        assert args.attack[:3] in attack_type,f"attack type should be chosen in {attack_type}"
+        cfg.ATTACKTYPE = args.attack[:2]
+        cfg.ATTACKDIRECTION = args.attack[2]
+        assert args.attack[3]==':',"attack type and attack method should be separated between ':'"
+        cfg.ATTACKMETHOD = args.attack[4:]
+    if args.defense != None:
+        cfg.DEFENSEMETHOD = args.defense
+
+    print_configCondition(args,cfg)
     cfg.freeze()
     default_setup(cfg, args)
+
     return cfg
 
 
@@ -46,7 +59,6 @@ def main(args):
     cfg.MODEL.BACKBONE.PRETRAIN = False
     cfg.MODEL.WEIGHTS='./model/model_.pth'
     cfg.MODEL.WEIGHTS=cfg.MODEL.WEIGHTS[0:-4]+cfg.DATASETS.NAMES[0]+cfg.MODEL.WEIGHTS[-4:]
-
 
     # the final result conclude some evaluating indicator, which you can get from ./fastreid/utils/reid_patch.py
     # if you want to update or change it, you can find the computing method in fastreid\evaluation\reid_evaluation.py
@@ -68,22 +80,27 @@ def main(args):
     # gallery   15913    751                     gallery    17661   1110
     pure_result ,pure_result_to_save= get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
 
+    
+
     if args.attack:
-        print('start attack')
-        att_result,att_result_to_save,SSIM= attack(cfg,query_set,gallery_set,match_type(cfg,'attack'),pos='adv_query')
+        print_info('start attack')
+        att_result,att_result_to_save,SSIM= attack(cfg,query_set,gallery_set,match_type(cfg,'attack'))
         print('ssim = ',SSIM)
 
     if args.defense:
-        print('start defense')
+        print_info('start defense')
         def_result,def_result_to_save, def_adv_result,def_adv_result_to_save = defense(cfg,train_set,query_set,gallery_set,match_type(cfg,'defense'))
 
     if args.record:
         record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM)
-        print('the results were recorded in the excel in the root path')
-    #record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save)
+        print_info('the results were recorded in the excel in the root path')
     
+    if args.log: #default True
+        record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save,save_pic = args.save_pic)
     
-    print("You have finished all the jobs !")
+
+    print_info("You have finished all the jobs !")
+
 
 
 if __name__ == "__main__":

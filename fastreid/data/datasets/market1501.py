@@ -8,6 +8,7 @@ import glob
 import os.path as osp
 import re
 import warnings
+import os
 
 from .bases import ImageDataset
 from ..datasets import DATASET_REGISTRY
@@ -45,6 +46,10 @@ class Market1501(ImageDataset):
             warnings.warn('The current data structure is deprecated. Please '
                           'put data folders such as "bounding_box_train" under '
                           '"Market-1501-v15.09.15".')
+        if not os.path.exists(self.data_dir+'/adv_query'):
+            os.makedirs(self.data_dir+'/adv_query')
+        if not os.path.exists(self.data_dir+'/adv_bounding_box_test'):
+            os.makedirs(self.data_dir+'/adv_bounding_box_test')
 
         self.train_dir = osp.join(self.data_dir, 'bounding_box_train')
         self.query_dir = osp.join(self.data_dir, 'query')

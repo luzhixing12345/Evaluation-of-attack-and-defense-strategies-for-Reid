@@ -9,7 +9,7 @@ from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.checkpoint import Checkpointer
 import torch.optim as optim
 
-from fastreid.utils.reid_patch import get_train_set, save_image
+from fastreid.utils.reid_patch import get_train_set, release_cuda_memory, save_image
 
 def l2normalize(v, eps=1e-12):
     return v / (v.norm() + eps)
@@ -218,59 +218,71 @@ def SSAE_attack(cfg,query_data_loader,pos):
     model.to(device)
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
-    alpha = 0.5*255.0
 
     generator = SSAE().to(device)
+    generator = nn.DataParallel(generator)
     generator.train()
     train_loader = get_train_set(cfg)
     cosine_loss = CosineLoss().to(device)
     optimizer = optim.Adam(generator.parameters(), lr=1e-4)
-    stats = ['angular_loss', 'loss']
-    meters_trn = {stat: AverageMeter() for stat in stats}
-    for batch_idx, data in enumerate(train_loader):
-        if batch_idx>4000:
-            break
+    mse_loss = nn.MSELoss(reduction='sum').to(device)
 
-        raw_imgs= data['images'].to(device)
-        # perturb images
-        with torch.no_grad():
-            perturbations, saliency_map = generator(raw_imgs)
+    EPOCHS = 10
+    delta = 0.1
+    alpha = 0.0001
+    for epoch in range(EPOCHS):
+        stats = ['angular_loss', 'loss']
+        meters_trn = {stat: AverageMeter() for stat in stats}
+        generator.train()
 
-        #perturbations = batch_clamp(delta, perturbations)
-
-        adv_imgs = raw_imgs + perturbations*alpha
-        adv_imgs = torch.clamp(adv_imgs, min=0.0, max=255.0)
-        # extract features from imgs and adv_imgs
-        raw_feats = model(raw_imgs)
-        #raw_norms = torch.norm(raw_feats, dim=1)
-        raw_feats = nn.functional.normalize(raw_feats, dim=1, p=2)
-        adv_feats = model(adv_imgs)
-        #adv_norms = torch.norm(adv_feats, dim=1)
-        adv_feats = nn.functional.normalize(adv_feats, dim=1, p=2)
-
-        angular_loss = cosine_loss(raw_feats, adv_feats)
-        loss = angular_loss
-
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        for k in stats:
-            v = locals()[k]
-            meters_trn[k].update(v.item(), 32)
+        for batch_idx, data in enumerate(train_loader):
+            if batch_idx>4000:
+                break
+        
+            raw_imgs= data['images'].to(device)
+            # perturb images
             
+            perturbations, saliency_map = generator(raw_imgs)
+            perturbations = batch_clamp(delta, perturbations)
+
+            adv_imgs =  raw_imgs + perturbations
+            adv_imgs = torch.clamp(adv_imgs, min=0.0, max=255.0)
+            # extract features from imgs and adv_imgs
+            raw_feats = model(raw_imgs)
+            raw_norms = torch.norm(raw_feats, dim=1)
+            raw_feats = nn.functional.normalize(raw_feats, dim=1, p=2)
+            adv_feats = model(adv_imgs)
+            adv_norms = torch.norm(adv_feats, dim=1)
+            adv_feats = nn.functional.normalize(adv_feats, dim=1, p=2)
+
+            angular_loss = cosine_loss(raw_feats, adv_feats)
+            loss = angular_loss
+
+            norm_loss = mse_loss(raw_norms, adv_norms)
+            frobenius_loss = torch.norm(saliency_map, dim=(1,2), p=2).sum()
+            loss += alpha * (norm_loss + frobenius_loss)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            for k in stats:
+                v = locals()[k]
+                meters_trn[k].update(v.item(), 32)
+    
+    release_cuda_memory()
     generator.eval()
     for batch_idx, data in enumerate(query_data_loader):
 
+        print('batch idx = ',batch_idx)
         raw_imgs= data['images'].to(device)
         path = data['img_paths']
         # perturb images
         perturbations, saliency_map = generator(raw_imgs)
         
-        #perturbations = batch_clamp(delta, perturbations)
+        perturbations = batch_clamp(delta, perturbations)
 
-        adv_imgs = raw_imgs + perturbations*alpha
+        adv_imgs = raw_imgs + perturbations * saliency_map
         adv_imgs = torch.clamp(adv_imgs, min=0.0, max=255.0)
 
         save_image(adv_imgs/255.0,path,pos)

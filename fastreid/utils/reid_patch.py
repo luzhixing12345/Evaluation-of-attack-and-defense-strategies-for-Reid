@@ -4,14 +4,15 @@ import time
 import os
 import shutil
 from numpy.core.numeric import correlate
+from numpy.lib.index_tricks import nd_grid
 import openpyxl
 import torch
 import torch.nn as nn
 from fastreid.data.build import (build_reid_test_data_loader,
                                  build_reid_query_data_loader,
                                  build_reid_att_query_data_loader,
-                                 build_reid_gallery_data_loader, build_reid_test_loader,
-                                 build_reid_train_loader, fast_batch_collator)
+                                 build_reid_gallery_data_loader,
+                                 build_reid_train_loader,)
 from fastreid.engine import DefaultTrainer
 from fastreid.solver.build import build_optimizer
 from fastreid.utils.checkpoint import Checkpointer
@@ -35,6 +36,8 @@ Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_librar
 
 evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
 evaluation_attackIndex=['mAP','1-SSIM','index']
+
+attack_type = ['QA+','QA-','GA+','GA-']
 num=len(evaluation_indicator)
 
 def get_query_set(cfg,relabel=True):
@@ -95,28 +98,29 @@ def eval_train(model,data_loader,max_id=-1):
     return 100. * correct / l
 
 
-def save_image(imgs,paths,str):    
+def save_image(imgs,paths,str):
+      
     imgs= imgs.cpu()                                                              
     toPIL = transforms.ToPILImage() #这个函数可以将张量转为PIL图片，由小数转为0-255之间的像素值
     
-    for img,path in zip(imgs,paths):  #zip 并行遍历
-        if path.find('bounding_box')!=-1:
-            print('save all the query set picture')
-            return
+    for img,path in zip(imgs,paths):
         pic = toPIL(img)
         position = path.find('query/') # path给的是绝对位置
         name = path[position+6:] #只需要提取出其名字即可
         pic.save(path[:position]+str+'/'+name)
+
     print(f"successful save in {path[:position]+str}")
 
-def classify_test_set(cfg,query_data_loader):
+
+
+def classify_test_set(cfg,data_loader):
     '''
     固定住backbone的权重，利用query_set重新训练cls_layer的weight,使其也能准确的分类图像和id
     转换成分类问题，可较好的接收针对于分类问题的算法攻击
     
     '''
     #set the number of neurons of the classifier layer as query set's targets number
-    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,query_data_loader.dataset.num_classes)
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,data_loader.dataset.num_classes)
 
     model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
@@ -140,7 +144,7 @@ def classify_test_set(cfg,query_data_loader):
     epoch = 5  #as far as i noticed,within 5 epoches the classifier layer can be trained to efficiently behave well
     for i in range(epoch):
         model.train()
-        for _,data in enumerate(query_data_loader):
+        for _,data in enumerate(data_loader):
             targets = data['targets'].to(device)
             optimizer.zero_grad()
             logits = model(data)
@@ -148,7 +152,7 @@ def classify_test_set(cfg,query_data_loader):
             loss.backward()
             optimizer.step()
             
-        accurency = eval_train(model,query_data_loader) #show the accurrency
+        accurency = eval_train(model,data_loader) #show the accurrency
         print('The accurency of query set in Train Epoch {} is {}'.format(i,accurency))
         print('---------------------------------------------------------------------')
     Checkpointer(model,'model').save('test_trained') # model was saved in ./model/test_trained.pth
@@ -157,7 +161,7 @@ def classify_test_set(cfg,query_data_loader):
 def match_type(cfg,type):
     
     if type == 'attack':
-        atk_method=cfg.MODEL.ATTACKMETHOD
+        atk_method=cfg.ATTACKMETHOD
         if atk_method in C_Attack_algorithm_library:
             return True
         elif atk_method in R_Attack_algorithm_library:
@@ -165,14 +169,13 @@ def match_type(cfg,type):
         else:
             raise KeyError('you should use the attack method in the library, or check your spelling')
     else:
-        def_method=cfg.MODEL.DEFENSEMETHOD
+        def_method=cfg.DEFENSEMETHOD
         if def_method in G_Defense_algorithm_library:
             return True
         elif def_method in R_Defense_algorithm_library:
             return False
         else :
             raise KeyError('you should use the defense method in the library, or check your spelling')
-
 
 
 def change_preprocess_image(cfg):
@@ -254,8 +257,8 @@ def sheet_AI_init(sheet_AI):
 
 def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
 
-    row_start = 4 + num*Attack_algorithm_library.index(cfg.MODEL.ATTACKMETHOD)
-    column1 = chr(ord('F') + Defense_algorithm_library.index(cfg.MODEL.DEFENSEMETHOD)*2)
+    row_start = 4 + num*Attack_algorithm_library.index(cfg.ATTACKMETHOD)
+    column1 = chr(ord('F') + Defense_algorithm_library.index(cfg.DEFENSEMETHOD)*2)
     column2 = chr(ord(column1)+1)
 
     for col,dict_name in {'D':pure_result,'E':att_result,column1:def_result,column2:def_adv_result}.items():
@@ -263,7 +266,7 @@ def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
             sheet[col+str(row_start+i)]  =dict_name[evaluation_indicator[i]]
 
 def save_attack_index(cfg,pure_result,att_result,SSIM,sheet):
-    row_start = 4 + Attack_algorithm_library.index(cfg.MODEL.ATTACKMETHOD)
+    row_start = 4 + Attack_algorithm_library.index(cfg.ATTACKMETHOD)
     column = 3
     
     index = {}
@@ -371,36 +374,40 @@ def mkdir(path):
     os.makedirs(path+"/adv_defense")
 
 
-def record_order(cfg,pure_result,att_result,def_result,def_adv_result):
-    query_set = get_query_set(cfg,relabel=False)
-    gallery_set = get_gallery_set(cfg,relabel=False)
-    # test_dataset,num_query = DefaultTrainer.build_test_loader(cfg,dataset_name=cfg.DATASETS.NAMES[0])
-    # images = []
-    # pids = []
-    # camids = []
+def record_order(cfg,pure_result,att_result,def_result,def_adv_result, pictureNumber = 50,save_pic=False):
+
     batch_size = cfg.TEST.IMS_PER_BATCH
-    gallery_images = []
-    gallery_targets = []
-    for _ ,data in enumerate(gallery_set):
-        gallery_images.append(data['images'].cpu()/255.0)
-        gallery_targets.append(data['targets'])
-    # print('batch size = ',batch_size)
-    # print('num_query = ',num_query)
 
-    # for _,data in enumerate(test_dataset):
-    #     images.append((data['images']/255.0).cpu())
-    #     pids.append(data['targets'].cpu())
-    #     camids.append(data['camids'].cpu())
+    # query_set = get_query_set(cfg,relabel=False)
+    # gallery_set = get_gallery_set(cfg,relabel=False)
     
-    # images = torch.cat(images,dim=0)
-    # pids = torch.cat(pids, dim=0)
-    # camids = torch.cat(camids,dim=0)
+    # gallery_images = []
+    # gallery_targets = []
+    # for _ ,data in enumerate(gallery_set):
+    #     gallery_images.append(data['images'].cpu()/255.0)
+    #     gallery_targets.append(data['targets'])
 
-    # query_images = images[:num_query]
-    # query_pids = pids[:num_query]
+    test_dataset,num_query = DefaultTrainer.build_test_loader(cfg,dataset_name=cfg.DATASETS.NAMES[0])
+    images = []
+    pids = []
+    camids = []
+    print('batch size = ',batch_size)
+    print('num_query = ',num_query)
 
-    # gallery_images = images[num_query:]
-    # gallery_pids = pids[num_query:]
+    for _,data in enumerate(test_dataset):
+        images.append((data['images']/255.0).cpu())
+        pids.append(data['targets'].cpu())
+        camids.append(data['camids'].cpu())
+    
+    images = torch.cat(images,dim=0)
+    pids = torch.cat(pids, dim=0)
+    camids = torch.cat(camids,dim=0)
+
+    query_images = images[:num_query]
+    query_pids = pids[:num_query]
+
+    gallery_images = images[num_query:]
+    gallery_pids = pids[num_query:]
 
     result_order = {}
     q_pid_save = {}
@@ -413,44 +420,19 @@ def record_order(cfg,pure_result,att_result,def_result,def_adv_result):
             for key,list in {'result_order':result_order,'q_pid_save':q_pid_save,'g_pids_save':g_pids_save}.items():
                 list[name]=dict[key]
 
-    pictureNumber = 50  #the same as 'max_rank' in engine/evaluation/rank.py  -> function(eval_cuhk/eval_market1501)
+    pictureNumber = pictureNumber  
+    #the same as 'max_rank' in engine/evaluation/rank.py  -> function(eval_cuhk/eval_market1501)
 
-    path = os.getcwd()+'/logs_pic/'+cfg.DATASETS.NAMES[0]+'/'+cfg.MODEL.ATTACKMETHOD+'_'+cfg.MODEL.DEFENSEMETHOD
+    
+    path = f"{os.getcwd()}/logs_pic/{cfg.DATASETS.NAMES[0]}/{cfg.ATTACKTYPE}{cfg.ATTACKDIRECTION}/{cfg.ATTACKMETHOD}_{cfg.DEFENSEMETHOD}"
     mkdir(path)
-    file = open(path+"/log.txt",'a')# write from the end of the txt,so it will record all your jobs
-    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
-    time_info = time.asctime( time.localtime(time.time()))
-    file.write("the log time is "+time_info+"\n") 
-    for name in ('origin','attack','defense'):
-        file.write('-------------------------------------------------------\n')
-        file.write(f'in {name} \n')
-        file.write('-------------------------------------------------------\n')
-        if q_pid_save[name]==None:
-            file.write(f'no result from {name}\n')
-        else:
-            file.write('query pid = ')
-            for i in range(pictureNumber):
-                file.write(f'{q_pid_save[name][i]} ')
-            file.write('\n')
-            for i in range(pictureNumber):
-                file.write("corresponding target :")
-                for j in range(pictureNumber):
-                    if g_pids_save[name][i][j]==q_pid_save[name][i]:
-                        file.write(' 1')
-                    else:
-                        file.write(' 0')
-                file.write('\n')
-            for i in range(pictureNumber):
-                file.write("gallery pids = ")
-                for j in range(pictureNumber):
-                    file.write(str(g_pids_save[name][i][j])+' ')
-                file.write('\n')
-            file.write('\n')
-    file.write('\nlog over\n')
-    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
-    file.close()
-    print("log over")
-    #start to save pictures
+
+    log(cfg,q_pid_save,g_pids_save,pictureNumber)
+    
+    
+    # start to save pictures
+
+    # save method 1
     # toPIL = transforms.ToPILImage()
 
     # for name,pos in result_order.items():
@@ -479,4 +461,125 @@ def record_order(cfg,pure_result,att_result,def_result,def_adv_result):
 
     #     print('gallery set pictures are all saved')
 
+
+
+    # save method 2
+    if save_pic:
+        toPIL = transforms.ToPILImage()
+        for name,pos in result_order.items():
+            print(f'start to save pictures of query&gallery set of {name}')
+        
+            for i in range(pictureNumber):
+                img = query_images[i]
+                target = query_pids[i]
+                os.makedirs(f'{path}/{name}/{i}')
+                toPIL(img).save(f'{path}/{name}/{i}/q_{target}.jpg')
+                if q_pid_save[name]==None:
+                    continue
+                if target!=q_pid_save[name][i]:
+                    print("target =",target)
+                    print('q_pid_save = ',q_pid_save[name][i])
+        
+            print('query set pictures are all saved ')
+            if pos==[]:
+                continue
+            for i in range(pictureNumber):
+                for j in range(pictureNumber):
+                    toPIL(gallery_images[pos[i][j]]).save(f'{path}/{name}/{i}/{j}_{gallery_pids[pos[i][j]].item()}.jpg')
+                    if gallery_pids[pos[i][j]].item()!=g_pids_save[name][i][j]:
+                        print("target =",gallery_pids[pos[i][j]].item())
+                        print('g_pid_save = ',g_pids_save[name][i][j])
+
+            print('gallery set pictures are all saved')
+
+    else :
+        print('You choose not to save pictures')
+
+def log(cfg,q_pid_save,g_pids_save,pictureNumber):
+    path = f"{os.getcwd()}/logs_pic"
+
+    file = open(path+"/log.txt",'a')# write from the end of the txt,so it will record all your jobs
+    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
+    time_info = time.asctime( time.localtime(time.time()))
+    file.write("the log time is "+time_info+"\n\n") 
+
+    file.write('Configuration:\n')
+    file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}")
+    file.write(f"     attack : {cfg.ATTACKMETHOD!=None}\n")
+    file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
+    file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
+    file.write(f"     defense: {cfg.DEFENSEMETHOD!=None} \n")
+    file.write(f"            defense method    = {cfg.DEFENSEMTHOD}\n"  )
     
+    for name in ('origin','attack','defense'):
+        rank = [0 for _ in range(pictureNumber)]
+        file.write('-------------------------------------------------------\n')
+        file.write(f'in {name} \n')
+        file.write('-------------------------------------------------------\n')
+        if q_pid_save[name]==None:
+            file.write(f'no result from {name}\n')
+        else:
+            file.write('query pid = ')
+            for i in range(pictureNumber):
+                file.write(f'{q_pid_save[name][i]} ')
+            file.write('\n')
+            for i in range(pictureNumber):
+                file.write("corresponding target :")
+                for j in range(pictureNumber):
+                    if g_pids_save[name][i][j]==q_pid_save[name][i]:
+                        rank[j]+=1
+                        file.write(' 1')
+                    else:
+                        file.write(' 0')
+                file.write('\n')
+            file.write("\n")
+            for i in range(1,pictureNumber):
+                rank[i]+=rank[i-1]
+            for i in [1,5,10]:
+                if i>pictureNumber:
+                    file.write(f"rank-{i} = {rank[i]*100.0/(pictureNumber*i)}%\n")
+            
+            # for i in range(pictureNumber):
+            #     file.write("gallery pids = ")
+            #     for j in range(pictureNumber):
+            #         file.write(str(g_pids_save[name][i][j])+' ')
+            #     file.write('\n')
+            file.write('\n')
+    file.write('\nlog over\n')
+    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
+    file.close()
+    print("log over")
+
+def print_info(str):
+    print('---------------------------------------------------------')
+    print('---------------------------------------------------------')
+    print(str)
+    print('---------------------------------------------------------')
+    print('---------------------------------------------------------')
+
+def print_configCondition(args,cfg):
+    print('---------------------------------------------------------')
+    print('---------------------------------------------------------')
+    print('Option:')
+    print(f"     attack : {args.attack!=None}")
+    print(f"            attack  method    = {cfg.ATTACKMETHOD}")
+    print(f"            attack  direction = {cfg.ATTACKDIRECTION}")
+    print(f"     defense: {args.defense!=None} ")
+    print(f"            defense method    = {cfg.DEFENSEMETHOD}"  )
+    print(f"     record : {args.record}")
+    if args.record:
+        print(f"            data will be recorded in ./{excel_name}")
+    else:
+        print(f"            data will not be recorded")
+
+    print(f"     log    : {args.log}")
+    if args.log:
+        print(f"            data will be recorded in ./{excel_name}")
+        if args.save_pic:
+            print(f"            pictures will be saved")
+        else:
+            print(f"            pictures will not be saved")
+    else:
+        print(f"            data will not be recorded")
+    print('---------------------------------------------------------')
+    print('---------------------------------------------------------')

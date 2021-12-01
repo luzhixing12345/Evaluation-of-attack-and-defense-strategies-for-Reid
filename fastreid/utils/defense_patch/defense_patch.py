@@ -26,7 +26,7 @@ def defense(cfg,train_set,query_set,gallery_set,type:bool):
     return def_result,def_result_to_save,def_adv_result,def_adv_result_to_save
         
 def defense_G(cfg,train_set):
-    if cfg.MODEL.DEFENSEMETHOD=='ADV_DEF':
+    if cfg.DEFENSEMETHOD=='ADV_DEF':
         if match_type(cfg,'attack'):
             adversarial_defense_C(cfg,train_set)
         else :
@@ -37,10 +37,10 @@ def defense_G(cfg,train_set):
             else:
                 pass
         
-    elif cfg.MODEL.DEFENSEMETHOD=='GRA_REG':
+    elif cfg.DEFENSEMETHOD=='GRA_REG':
         gradient_regulation(cfg,train_set)
     
-    elif cfg.MODEL.DEFENSEMETHOD=='DISTILL':
+    elif cfg.DEFENSEMETHOD=='DISTILL':
         distillation(cfg,train_set)
         
     release_cuda_memory()
@@ -48,10 +48,10 @@ def defense_G(cfg,train_set):
 
 def defense_R(cfg,train_set,query_set,gallery_set):
     _robrank_set_ =['SES','EST','PNP']
-    if cfg.MODEL.DEFENSEMETHOD=='GOAT':
+    if cfg.DEFENSEMETHOD=='GOAT':
         GOAT(cfg,train_set,pull=cfg.PULL,nb_r=cfg.NB_R)
-    elif cfg.MODEL.DEFENSEMETHOD in _robrank_set_:
-        robrank_defense(cfg,train_set,cfg.MODEL.DEFENSEMETHOD)
+    elif cfg.DEFENSEMETHOD in _robrank_set_:
+        robrank_defense(cfg,train_set,cfg.DEFENSEMETHOD)
     else :
         raise 
 

@@ -7,6 +7,7 @@
 import glob
 import os.path as osp
 import re
+import os
 
 from .bases import ImageDataset
 from ..datasets import DATASET_REGISTRY
@@ -35,6 +36,12 @@ class DukeMTMC(ImageDataset):
         # self.root = osp.abspath(osp.expanduser(root))
         self.root = root
         self.dataset_dir = osp.join(self.root, self.dataset_dir)
+
+        if not os.path.exists(self.dataset_dir+'/adv_query'):
+            os.makedirs(self.dataset_dir+'/adv_query')
+        if not os.path.exists(self.dataset_dir+'/adv_bounding_box_test'):
+            os.makedirs(self.dataset_dir+'/adv_bounding_box_test')
+
         self.train_dir = osp.join(self.dataset_dir, 'bounding_box_train')
         self.query_dir = osp.join(self.dataset_dir, 'query')
         self.adv_query_dir = osp.join(self.dataset_dir, 'adv_query')

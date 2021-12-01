@@ -265,17 +265,23 @@ class AdvRank:
                 raise Exception("Unknown attack")
             loss.backward()
             
+            # grad = images.grad
+            # images = images + self.alpha *torch.sign(images.grad)
+            # images = images.clone().detach()
+            # images.requires_grad = True
+            # images.grad = grad
             images.grad.data.copy_(self.alpha * torch.sign(images.grad))
-
+ 
             optimx.step()
             # L_infty constraint
-            images = torch.min(images, images_orig + self.eps)
+            #images = torch.min(images, images_orig + self.eps)
             # L_infty constraint
-            images = torch.max(images, images_orig - self.eps)
+            #images = torch.max(images, images_orig - self.eps)
             images = torch.clamp(images, min=0., max=1.)
             images = images.clone().detach()
             images.requires_grad = True
         
+        print("change = ",images-images_orig)
         optim.zero_grad()
         optimx.zero_grad()
         return images

@@ -52,9 +52,11 @@ def default_argument_parser():
         help="whether to attempt to resume from the checkpoint directory",
     )
     parser.add_argument("--T", action="store_true", help="to train the original model")
-    parser.add_argument("--attack",action="store_true", help="attack the model")
-    parser.add_argument("--defense",action="store_true", help="defend the model")
+    parser.add_argument("--attack",nargs="?", help="attack the model")
+    parser.add_argument("--defense",nargs="?", help="defend the model")
     parser.add_argument("--record",action="store_true", help="whether to record the result in the excel")
+    parser.add_argument("--log", default=True, help="log the work")
+    parser.add_argument("--save-pic", default=False, help="save pictures of query set and gallery set after attack and defense ")
 
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="total number of machines")

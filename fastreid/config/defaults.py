@@ -123,15 +123,20 @@ _C.MODEL.WEIGHTS = ""
 _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'
 _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"
 
-_C.MODEL.ATTACKMETHOD=""
-_C.MODEL.ATTACKTYPE ="QA+"
-_C.MODEL.DEFENSEMETHOD=""
+_C.ATTACKMETHOD=""
+_C.ATTACKTYPE =""        # "QA" or "GA"
+_C.ATTACKDIRECTION = ""  # "+" or "-"
+
+
+_C.DEFENSEMETHOD=""
+
 
 
 _C.TARGET = False
 _C.RAND = False
 _C.NB_R = 4
 _C.PULL = True
+
 # Values to be used for image normalization
 _C.MODEL.PIXEL_MEAN = [0.485*255, 0.456*255, 0.406*255]
 # Values to be used for image normalization
