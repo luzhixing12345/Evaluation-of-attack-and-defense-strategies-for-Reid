@@ -124,6 +124,8 @@ _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'
 _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"
 
 _C.ATTACKMETHOD=""
+_C.ATTACK_C =False
+_C.ATTACK_R =False
 _C.ATTACKTYPE =""        # "QA" or "GA"
 _C.ATTACKDIRECTION = ""  # "+" or "-"
 

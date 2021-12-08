@@ -1,10 +1,8 @@
 
-import enum
 import time
 import os
 import shutil
-from numpy.core.numeric import correlate
-from numpy.lib.index_tricks import nd_grid
+
 import openpyxl
 import torch
 import torch.nn as nn
@@ -26,8 +24,8 @@ from fastreid.engine import DefaultTrainer
 device= 'cuda'
 excel_name = 'result.xlsx'
 
-C_Attack_algorithm_library=["FGSM",'IFGSM','MIFGSM','ODFA']  #针对分类问题的攻击算法库
-R_Attack_algorithm_library=['SMA','FNA','MUAP','SSAE','ES','GTM', 'GTT', 'TMA', 'LTM','CA+','CA-','QA+','QA-','SPQA']
+C_Attack_algorithm_library=["C-FGSM",'C-IFGSM','C-MIFGSM']  #针对分类问题的攻击算法库
+R_Attack_algorithm_library=['R-FGSM','R-IFGSM','R-MIFGSM','ODFA','SMA','FNA','MUAP','SSAE','ES','GTM', 'GTT', 'TMA', 'LTM']
 Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
 
 G_Defense_algorithm_library=['ADV_DEF','GRA_REG','DISTILL']
@@ -504,12 +502,15 @@ def log(cfg,q_pid_save,g_pids_save,pictureNumber):
     file.write("the log time is "+time_info+"\n\n") 
 
     file.write('Configuration:\n')
-    file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}")
+    file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}\n")
     file.write(f"     attack : {cfg.ATTACKMETHOD!=None}\n")
-    file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
-    file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
+    if cfg.ATTACKMETHOD!=None:
+        file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
+        file.write(f"            attack  type      = {cfg.ATTACKTYPE}\n")
+        file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
     file.write(f"     defense: {cfg.DEFENSEMETHOD!=None} \n")
-    file.write(f"            defense method    = {cfg.DEFENSEMTHOD}\n"  )
+    if cfg.DEFENSEMETHOD!=None:
+        file.write(f"            defense method    = {cfg.DEFENSEMETHOD}\n"  )
     
     for name in ('origin','attack','defense'):
         rank = [0 for _ in range(pictureNumber)]
@@ -563,6 +564,7 @@ def print_configCondition(args,cfg):
     print('Option:')
     print(f"     attack : {args.attack!=None}")
     print(f"            attack  method    = {cfg.ATTACKMETHOD}")
+    print(f"            attack  type      = {cfg.ATTACKTYPE}")
     print(f"            attack  direction = {cfg.ATTACKDIRECTION}")
     print(f"     defense: {args.defense!=None} ")
     print(f"            defense method    = {cfg.DEFENSEMETHOD}"  )

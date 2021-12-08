@@ -7,16 +7,22 @@
 import sys
 
 sys.path.append('.')
-from fastreid.utils.reid_patch import get_gallery_set, get_query_set, get_train_set, print_configCondition, print_info,record,get_result, record_order
-from fastreid.utils.attack_patch.attack_patch import attack
+from fastreid.utils.reid_patch import ( C_Attack_algorithm_library, R_Attack_algorithm_library, get_gallery_set, 
+                                        get_query_set, 
+                                        get_train_set, 
+                                        print_configCondition, 
+                                        print_info,record,
+                                        get_result, 
+                                        record_order,
+                                        )
+from fastreid.utils.attack_patch.attack_process import attack, attack_R
 from fastreid.utils.defense_patch.defense_patch import defense
 from fastreid.utils.reid_patch import match_type
 from fastreid.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from fastreid.config import get_cfg
 
-
-attack_type = ['QA+','QA-','GA+','GA-']
-
+attack_R_type = ['QA+','QA-','GA+','GA-']
+attack_C_type = ['T','UT']
 
 def setup(args):
     """
@@ -27,12 +33,25 @@ def setup(args):
     cfg.merge_from_list(args.opts)
     
     if args.attack!=None:
-        assert len(args.attack)>=5,"--attack arguments should follow with attackType:attackMethod "
-        assert args.attack[:3] in attack_type,f"attack type should be chosen in {attack_type}"
-        cfg.ATTACKTYPE = args.attack[:2]
-        cfg.ATTACKDIRECTION = args.attack[2]
-        assert args.attack[3]==':',"attack type and attack method should be separated between ':'"
-        cfg.ATTACKMETHOD = args.attack[4:]
+        try:
+            attack_type ,cfg.ATTACKMETHOD = args.attack.split(":")
+        except:
+            raise ValueError(f'input :{args.attack} is not correct, please check usage in USE.md')
+        if attack_type in attack_R_type:
+            cfg.ATTACKTYPE = attack_type[:-1]
+            cfg.ATTACKDIRECTION = attack_type[-1]
+        elif attack_type in attack_C_type:
+            cfg.ATTACKTYPE = attack_type
+        else:
+            raise ValueError(f"{attack_type} not found, please check usage in USE.md")
+        if cfg.ATTACKMETHOD in C_Attack_algorithm_library:
+            cfg.ATTACK_C = True
+            cfg.ATTACK_R = False
+        elif cfg.ATTACKMETHOD in R_Attack_algorithm_library:
+            cfg.ATTACK_C = False
+            cfg.ATTACK_R = True
+        else :
+            raise ValueError(f'{cfg.ATTACKMETHOD} not found, please check usage in USE.md')
     if args.defense != None:
         cfg.DEFENSEMETHOD = args.defense
 
@@ -46,15 +65,15 @@ def setup(args):
 def main(args):
     cfg = setup(args)
     
-    if args.T:
+    if args.train:
         trainer = DefaultTrainer(cfg)
         trainer.resume_or_load(resume=args.resume)
         trainer.train()
         return 
 
-    query_set = get_query_set(cfg)  
-    gallery_set = get_gallery_set(cfg)
-    train_set = get_train_set(cfg)  
+    # query_set = get_query_set(cfg)  
+    # gallery_set = get_gallery_set(cfg)
+    # train_set = get_train_set(cfg)  
     cfg.defrost()
     cfg.MODEL.BACKBONE.PRETRAIN = False
     cfg.MODEL.WEIGHTS='./model/model_.pth'
@@ -84,7 +103,7 @@ def main(args):
 
     if args.attack:
         print_info('start attack')
-        att_result,att_result_to_save,SSIM= attack(cfg,query_set,gallery_set,match_type(cfg,'attack'))
+        (att_result,att_result_to_save),SSIM= attack(cfg)
         print('ssim = ',SSIM)
 
     if args.defense:

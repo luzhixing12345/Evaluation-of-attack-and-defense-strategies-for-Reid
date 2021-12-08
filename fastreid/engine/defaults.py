@@ -51,7 +51,7 @@ def default_argument_parser():
         action="store_true",
         help="whether to attempt to resume from the checkpoint directory",
     )
-    parser.add_argument("--T", action="store_true", help="to train the original model")
+    parser.add_argument("--train", action="store_true", help="to train the original model")
     parser.add_argument("--attack",nargs="?", help="attack the model")
     parser.add_argument("--defense",nargs="?", help="defend the model")
     parser.add_argument("--record",action="store_true", help="whether to record the result in the excel")

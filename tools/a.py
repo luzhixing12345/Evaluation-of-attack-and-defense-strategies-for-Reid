@@ -1,7 +1,12 @@
 
+
+
 import torch
+import torch.nn.functional as F
 
-a = [torch.tensor([[i,i+1],[i,i+1],[i+1,i+2]]) for i in range(10)]
-b= torch.stack(a)
-
-print(b.shape)
+a = torch.randint(10,(12,20)).float()
+print(a.shape)
+b = a[0]
+b = b.unsqueeze(0)
+features = F.normalize(b, p=2, dim=1)
+print(features)
