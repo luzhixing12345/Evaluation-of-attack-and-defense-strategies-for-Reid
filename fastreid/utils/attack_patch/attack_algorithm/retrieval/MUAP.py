@@ -4,7 +4,7 @@ import torch.nn as nn
 import torchvision.transforms as T
 from torch.autograd import Variable
 
-from fastreid.utils.reid_patch import save_image
+attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
 
 def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=10):
 
@@ -38,48 +38,80 @@ def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=1
     return att_img, sat, g
 
 
-def MUAP(cfg,query_loader,model,pos,scale_rate=0.8,radiu=10):
 
 
-    torch.manual_seed(1)
-    attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
-    normalize_transform = T.Normalize(mean=cfg.MODEL.PIXEL_MEAN, std=cfg.MODEL.PIXEL_STD)
-    g = torch.tensor([0.])
-    pre_sat = 1.
-    loss_fn1 = MapLoss()
-    loss_fn2 = TVLoss(TVLoss_weight=10.)
 
-    epoch =10
-    for i in range(epoch):   #
-        print('epoch', i)
-        for idx,data in enumerate(query_loader):
+class MUAP:
+    def __init__(self,cfg,model) -> None:
+        self.cfg = cfg
+        self.model = model
+        self.model.eval()
+        self.scale_rate = 0.8
+        self.radiu = 10
+        self.EPOCH = 50
+
+        torch.manual_seed(1)
+        
+        self.normalize_transform = T.Normalize(mean=cfg.MODEL.PIXEL_MEAN, std=cfg.MODEL.PIXEL_STD)
+        self.g = torch.tensor([0.])
+        self.pre_sat = 1.
+        self.loss_fn1 = MapLoss()
+        self.loss_fn2 = TVLoss(TVLoss_weight=10.)
+
+    def __call__(self, images,target):
+        if len(images.shape)==5:
+            return self.GA(images,target)
+        
+        global attack_img
+        for epoch in range(self.EPOCH):
             attack_img = Variable(attack_img, requires_grad=True)
-            images = (data['images']/255.0).to('cuda')
-            target = data['targets'].to('cuda')
-
-            median_img = torch.add(images,normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
-
-            feat = model(images)
-            attack_feat = model(median_img)
+            median_img = torch.add(images,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
+            feat = self.model(images)
+            attack_feat = self.model(median_img)
            
-            map_loss = loss_fn1(attack_feat, feat, target, 5)
-            tvl_loss = loss_fn2(median_img)
+            map_loss = self.loss_fn1(attack_feat, feat, target, 5)
+            tvl_loss = self.loss_fn2(median_img)
             total_loss = tvl_loss + map_loss
 
             total_loss.backward()
-            model.zero_grad()
+            self.model.zero_grad()
 
             attack_grad = attack_img.grad.data
-            attack_img, sat, g = attack_update(attack_img, attack_grad, pre_sat, g, scale_rate,i,radiu)
+            attack_img, sat, g = attack_update(attack_img, attack_grad, pre_sat, g, self.scale_rate,epoch,self.radiu)
             pre_sat = sat
 
-            if i==epoch-1:
-                path = data['img_paths']
-                save_image(median_img,path,pos)
+        return attack_img
+    
+    def GA(self,images,target):
 
+        global attack_img
 
+        _,N,_,_,_ = images.shape
 
+        new_images = []
+        for i in range(N):
+            img = images[:,i,:,:,:]
+            for epoch in range(self.EPOCH):
+                attack_img = Variable(attack_img, requires_grad=True)
+                median_img = torch.add(img,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
+                feat = self.model(img)
+                attack_feat = self.model(median_img)
+            
+                map_loss = self.loss_fn1(attack_feat, feat, target, 5)
+                tvl_loss = self.loss_fn2(median_img)
+                total_loss = tvl_loss + map_loss
+
+                total_loss.backward()
+                self.model.zero_grad()
+
+                attack_grad = attack_img.grad.data
+                attack_img, sat, g = attack_update(attack_img, attack_grad, pre_sat, g, self.scale_rate,epoch,self.radiu)
+                pre_sat = sat
+            new_images.append(img)
         
+        new_images = torch.stack(new_images)
+        new_images = new_images.permute(1,0,2,3,4)
+        return new_images
 
 
 

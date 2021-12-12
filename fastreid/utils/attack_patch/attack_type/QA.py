@@ -6,12 +6,12 @@ from fastreid.engine import DefaultTrainer
 from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.attack_patch.attack_algorithm import *
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, evaluate_ssim, get_query_set, get_result, save_image
-
+from fastreid.utils.reid_patch import CHW_to_HWC, change_preprocess_image, get_query_set, get_result, save_image
+import skimage
 
 from fastreid.utils.compute_dist import build_dist
 
-
+device = 'cuda'
 class QueryAttack:
     '''
     do QA+- for retrieval algorithm
@@ -20,6 +20,7 @@ class QueryAttack:
         self.cfg = cfg
         self.batch_size = cfg.TEST.IMS_PER_BATCH
         self.direction  = cfg.ATTACKDIRECTION
+        self.pretrained = cfg.ATTACKPRETRAINED
         self.target = True if self.direction=='+' else False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"  
         self.default_setup()
@@ -32,7 +33,15 @@ class QueryAttack:
         self.model.heads = build_feature_heads(self.cfg)
         self.model.to(self.device)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
-        
+
+        self.SSIM=0
+        self.SSAE_generator = None
+        self.MISR_generator = None
+        if self.cfg.ATTACKMETHOD=='SSAE':
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD=='MISR':
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,self.model,ak_type=-1,pretrained=self.pretrained)
+    
     def pretreatment(self):
         test_dataset,num_query = DefaultTrainer.build_test_loader(self.cfg,dataset_name=self.cfg.DATASETS.NAMES[0])
         pids = []
@@ -62,10 +71,17 @@ class QueryAttack:
         self.indices = np.argsort(self.dist, axis=1)
         self.matches = (self.gallery_pids[self.indices] == self.query_pids[:, np.newaxis]).astype(np.int32)#3368x15913
         
-    def attack_images(self,images,selected_features):
+    def attack_images(self,images,selected_features,target):
 
         attack_method = self.get_attack_method()
-        adv_images = attack_method(images,selected_features)
+        if self.cfg.ATTACKMETHOD=='ODFA':
+            with torch.no_grad():
+                features = self.model(images)
+            adv_images = attack_method(images,features)
+        elif self.cfg.ATTACKMETHOD=='MUAP':
+            adv_images = attack_method(images,target)
+        else :
+            adv_images = attack_method(images,selected_features)
 
         return adv_images
 
@@ -107,7 +123,7 @@ class QueryAttack:
                     m += mse(f1,f)
             return m
         def odfa(f1, f2):
-            return mse(f1, -f2)
+            return mse(f1,-f2)
         def max_min_mse(f1s, f2s):
             # f1, f2 = fs[:,0,:], fs[:,1,:]
             # return mse(x,f1) - mse(x,f2)
@@ -121,32 +137,49 @@ class QueryAttack:
         eps=0.05
         eps_iter=1.0/255.0
         dict = {
-                    'R-FGSM'  :FGSM(self.cfg,self.model, QA_MSE, eps=eps,targeted=self.target),
-                    'R-IFGSM' :IFGSM(self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                    'R-MIFGSM':MIFGSM(self.cfg,self.model,QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-                    'ODFA'    :IFGSM(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                    'SMA'     :IFGSM(self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
-                    'FNA'     :IFGSM(self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                }
+            'R-FGSM'  :FGSM  (self.cfg,self.model, QA_MSE, eps=eps,targeted=self.target),
+            'R-IFGSM' :IFGSM (self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'R-MIFGSM':MIFGSM(self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'ODFA'    :ODFA  (self.cfg,self.model, odfa,   eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
+            'SMA'     :IFGSM (self.cfg,self.model, mse,    eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
+            'FNA'     :IFGSM (self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'SSAE'    :self.SSAE_generator,
+            'MISR'    :self.MISR_generator,
+            'MUAP'    :MUAP(self.cfg,self.model)
+        }
         return dict[self.cfg.ATTACKMETHOD]
+
+    def evaluate(self,images1,images2):
+        size = images1.shape[0]
+        SSIM = 0
+        for i in range(size):
+            image1 = CHW_to_HWC(images1[i])
+            image2 = CHW_to_HWC(images2[i])
+            SSIM += skimage.measure.compare_ssim(image1,image2,multichannel=True)
+        SSIM/=size
+        self.SSIM+=SSIM
+
 
     def attack(self):
         
-        query_data_loader = get_query_set(self.cfg)
-        for q_idx ,data in enumerate(query_data_loader):
+        self.query_data_loader = get_query_set(self.cfg)
+        for q_idx ,data in enumerate(self.query_data_loader):
             
             images = (data['images']/255).clone().detach()
+            target = data['targets'].to(device)
             path = data['img_paths']
             #images_orig = images.clone()
             images = images.requires_grad_()
 
             selected_features = self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)
             
-            adv_images = self.attack_images(images,selected_features)
+            adv_images = self.attack_images(images,selected_features,target)
+            self.evaluate(images,adv_images)
             
             save_image(adv_images,path,'adv_query')
         
     def get_result(self):
-        return get_result(self.cfg,self.cfg.MODEL.WEIGHTS,'attack'),evaluate_ssim(self.cfg)
+        self.SSIM/=len(self.query_data_loader)
+        return get_result(self.cfg,self.cfg.MODEL.WEIGHTS,'attack'),self.SSIM
     
 

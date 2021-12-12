@@ -162,8 +162,8 @@ class AdvRank:
             #candi[1] -> targets  ->candi[1][i]:batch_size
 
 
-            #output_orig, dist_orig, summary_orig = self.eval_advrank(
-            #    images, labels, candi, resample=True)
+            output_orig, dist_orig, summary_orig = self.eval_advrank(
+                images, labels, candi, resample=True)
         self.qcsel = QCSelector(f'{self.attack_type}{self.pm}', self.M, self.W)(dist, candi)
         
         for iteration in range(self.pgditer):
@@ -378,7 +378,7 @@ class AdvRank:
         output, dist = self.outputdist(images, labels, candi)
         '''
         dist:  该img和所有其他图片的features计算距离
-        output：该img的features
+        output:该img的features
         '''
         attack_type = self.attack_type
         M, W = self.M, self.W

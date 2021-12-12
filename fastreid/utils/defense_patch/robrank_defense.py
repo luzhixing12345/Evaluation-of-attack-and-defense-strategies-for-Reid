@@ -3,7 +3,6 @@
 
 import functools as ft
 
-from fastreid.utils.attack_patch.robrank import AdvRank
 import torch.nn.functional as F
 import torch.nn as nn
 import torch

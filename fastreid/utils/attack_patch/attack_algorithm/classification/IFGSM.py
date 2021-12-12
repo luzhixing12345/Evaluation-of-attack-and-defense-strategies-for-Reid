@@ -5,7 +5,6 @@ import torch.nn as nn
 import numpy as np
 from torch.distributions import laplace
 from torch.distributions import uniform
-from torch.nn.modules.loss import _Loss
 
 from advertorch.utils import clamp
 from advertorch.utils import normalize_by_pnorm
@@ -160,6 +159,8 @@ class PGDAttack(Attack, LabelMixin):
                   - if self.targeted=True, then y must be the targeted labels.
         :return: tensor containing perturbed inputs.
         """
+        if(self.cfg.ATTACKTYPE=='GA'):
+            return self.perturb_GA(x,y)
         x, y = self._verify_and_process_inputs(x, y)
 
         delta = torch.zeros_like(x)
@@ -180,6 +181,36 @@ class PGDAttack(Attack, LabelMixin):
         )
 
         return rval.data
+    def perturb_GA(self, x, y):
+
+        _,N,_,_,_=x.shape
+
+        new_x = []
+        for i in range(N):
+            xadv = x[:,i,:,:,:].clone().detach()
+            xadv.requires_grad_()
+            delta = torch.zeros_like(xadv)
+            delta = nn.Parameter(delta)
+            if self.rand_init:
+                rand_init_delta(
+                    delta, xadv, self.ord, self.eps, self.clip_min, self.clip_max)
+                delta.data = clamp(
+                    xadv + delta.data, min=self.clip_min, max=self.clip_max) - xadv
+
+            rval = perturb_iterative(
+                xadv, y, self.predict, nb_iter=self.nb_iter,
+                eps=self.eps, eps_iter=self.eps_iter,
+                loss_fn=self.loss_fn, minimize=self.targeted,
+                ord=self.ord, clip_min=self.clip_min,
+                clip_max=self.clip_max, delta_init=delta,
+                l1_sparsity=self.l1_sparsity,
+            )
+            new_x.append(rval.data)
+
+        new_x = torch.stack(new_x)
+        new_x = new_x.permute(1,0,2,3,4)
+        return new_x
+        
 
 class LinfPGDAttack(PGDAttack):
     """
@@ -249,3 +280,4 @@ def rand_init_delta(delta, x, ord, eps, clip_min, clip_max):
 
 
 IFGSM = LinfPGDAttack
+ODFA = LinfPGDAttack

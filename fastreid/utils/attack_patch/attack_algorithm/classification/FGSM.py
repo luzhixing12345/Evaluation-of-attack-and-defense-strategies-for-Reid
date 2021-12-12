@@ -102,6 +102,8 @@ class GradientSignAttack(Attack, LabelMixin):
             xadv = clamp(xadv, self.clip_min, self.clip_max)
             new_x.append(xadv)
 
+        new_x = torch.stack(new_x)
+        new_x = new_x.permute(1,0,2,3,4)
         return new_x
 
 

@@ -128,7 +128,7 @@ _C.ATTACK_C =False
 _C.ATTACK_R =False
 _C.ATTACKTYPE =""        # "QA" or "GA"
 _C.ATTACKDIRECTION = ""  # "+" or "-"
-
+_C.ATTACKPRETRAINED = False
 
 _C.DEFENSEMETHOD=""
 

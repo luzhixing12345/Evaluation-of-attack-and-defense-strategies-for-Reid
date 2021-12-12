@@ -56,8 +56,8 @@ def default_argument_parser():
     parser.add_argument("--defense",nargs="?", help="defend the model")
     parser.add_argument("--record",action="store_true", help="whether to record the result in the excel")
     parser.add_argument("--log", default=True, help="log the work")
-    parser.add_argument("--save-pic", default=False, help="save pictures of query set and gallery set after attack and defense ")
-
+    parser.add_argument("--save-pic", action="store_true", help="save pictures of query set and gallery set after attack and defense ")
+    parser.add_argument("--pretrained", action="store_true", help="use pretrained attack model,especially for SSAE,MISR ")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
     parser.add_argument("--num-machines", type=int, default=1, help="total number of machines")
     parser.add_argument(
@@ -502,7 +502,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -518,7 +518,7 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i,result_to_save
+        return results_i
 
     @classmethod
     def advtest(cls, cfg, model):
@@ -542,7 +542,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -558,7 +558,7 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i,result_to_save
+        return results_i
     
     @classmethod
     def def_advtest(cls, cfg, model):
@@ -582,7 +582,7 @@ class DefaultTrainer(TrainerBase):
                 )
                 results[dataset_name] = {}
                 continue
-            results_i ,result_to_save= inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
+            results_i = inference_on_dataset(model, data_loader, evaluator, flip_test=cfg.TEST.FLIP.ENABLED)
             results[dataset_name] = results_i
 
             if comm.is_main_process():
@@ -598,7 +598,7 @@ class DefaultTrainer(TrainerBase):
         if len(results) == 1:
             results = list(results.values())[0]
 
-        return results_i,result_to_save
+        return results_i
 
 
     @staticmethod

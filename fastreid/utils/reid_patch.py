@@ -1,4 +1,5 @@
 
+import copy
 import time
 import os
 import shutil
@@ -16,16 +17,13 @@ from fastreid.solver.build import build_optimizer
 from fastreid.utils.checkpoint import Checkpointer
 from openpyxl.utils import get_column_letter
 from torchvision import transforms
-from skimage import transform 
-import skimage
-import skimage.io as io
 from fastreid.engine import DefaultTrainer
 
 device= 'cuda'
 excel_name = 'result.xlsx'
 
-C_Attack_algorithm_library=["C-FGSM",'C-IFGSM','C-MIFGSM']  #针对分类问题的攻击算法库
-R_Attack_algorithm_library=['R-FGSM','R-IFGSM','R-MIFGSM','ODFA','SMA','FNA','MUAP','SSAE','ES','GTM', 'GTT', 'TMA', 'LTM']
+C_Attack_algorithm_library=["C-FGSM",'C-IFGSM','C-MIFGSM','CW']  #针对分类问题的攻击算法库
+R_Attack_algorithm_library=['R-FGSM','R-IFGSM','R-MIFGSM','ODFA','MISR','FNA','MUAP','SSAE','ES','GTM', 'GTT', 'TMA', 'LTM']
 Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
 
 G_Defense_algorithm_library=['ADV_DEF','GRA_REG','DISTILL']
@@ -33,7 +31,7 @@ R_Defense_algorithm_library=['GOAT','EST','SES','PNP']
 Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_library
 
 evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
-evaluation_attackIndex=['mAP','1-SSIM','index']
+evaluation_attackIndex=['mAP','SDSIM','index']
 
 attack_type = ['QA+','QA-','GA+','GA-']
 num=len(evaluation_indicator)
@@ -58,21 +56,6 @@ def get_train_set(cfg):
     train_data_loader = build_reid_train_loader(cfg)
     return train_data_loader
 
-def evaluate_ssim(cfg):
-    query_data_loader=get_query_set(cfg)
-    att_query_data_loader=get_att_query_set(cfg)
-    SSIM=0
-    for data1,data2 in zip(query_data_loader,att_query_data_loader): 
-        path1 = data1['img_paths']
-        path2 = data2['img_paths']
-        for pic1,pic2 in zip(path1,path2):
-            image1 = io.imread(pic1)   
-            image2 = io.imread(pic2)  
-            image2=transform.resize(image2,(image1.shape))
-            image2*=255
-            SSIM+=skimage.measure.compare_ssim(image1,image2,multichannel=True,data_range=255)
-    SSIM/=(len(query_data_loader)*cfg.TEST.IMS_PER_BATCH)
-    return SSIM
 
 
 @torch.no_grad()
@@ -204,14 +187,14 @@ def get_result(cfg,model_path,step:str)->dict:
     model =DefaultTrainer.build_model(cfg)  # 启用baseline,用于测评
     Checkpointer(model).load(model_path)
     if step=='attack':
-        result ,result_to_save= DefaultTrainer.advtest(cfg,model)# advtest用于测试adv_query与gallery合成的test_set
+        result = DefaultTrainer.advtest(cfg,model)# advtest用于测试adv_query与gallery合成的test_set
     elif step=='pure' or step=='defense':
-        result ,result_to_save= DefaultTrainer.test(cfg,model)# test用于测试query与gallery合成的test_set
+        result = DefaultTrainer.test(cfg,model)# test用于测试query与gallery合成的test_set
     elif step =='def-attack':
-        result ,result_to_save= DefaultTrainer.def_advtest(cfg,model)# def-advtest用于测试def-adv_query与gallery合成的test_set
+        result = DefaultTrainer.def_advtest(cfg,model)# def-advtest用于测试def-adv_query与gallery合成的test_set
     else:
         raise KeyError('you must choose the step to select the correct dataset of query and gallery for evaluation.')
-    return result,result_to_save
+    return result
 
 
 
@@ -242,16 +225,27 @@ def sheet_init(sheet):
         sheet[get_column_letter(7+2*col)+str(3)]='ATFER ATTACK'
 
 def sheet_AI_init(sheet_AI):
-    for row in range (3,4+len(Attack_algorithm_library)):
-        for col in range (2,6):
+    for row in range (3,4+2*len(C_Attack_algorithm_library)+4*len(R_Attack_algorithm_library)):
+        for col in range (2,7):
             sheet_AI.column_dimensions[get_column_letter(col)].width = 20
             sheet_AI.row_dimensions[row].height = 40
+
+    bias = 4
+    for row,name in enumerate(C_Attack_algorithm_library):
+        sheet_AI['B'+str(bias+2*row)]=name
+        sheet_AI['B'+str(bias+1+2*row)]=name
+        sheet_AI['C'+str(bias+2*row)]='UT'
+        sheet_AI['C'+str(bias+2*row+1)]='T'
     
-    for row,name in enumerate(Attack_algorithm_library):
-        sheet_AI['B'+str(4+row)]=name
+    bias = 4+2*len(C_Attack_algorithm_library)
+    for row,name in enumerate(R_Attack_algorithm_library):
+        for i in range(4):
+            sheet_AI['B'+str(bias+i+4*row)]=name
+        for i,type in enumerate(attack_type):
+            sheet_AI['C'+str(bias+4*row+i)] =type
     
     for i in range(len(evaluation_attackIndex)):
-        sheet_AI[get_column_letter(i+3)+'3'] = evaluation_attackIndex[i]
+        sheet_AI[get_column_letter(i+4)+'3'] = evaluation_attackIndex[i]
 
 def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
 
@@ -264,16 +258,24 @@ def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
             sheet[col+str(row_start+i)]  =dict_name[evaluation_indicator[i]]
 
 def save_attack_index(cfg,pure_result,att_result,SSIM,sheet):
-    row_start = 4 + Attack_algorithm_library.index(cfg.ATTACKMETHOD)
-    column = 3
+    if cfg.ATTACKMETHOD in C_Attack_algorithm_library:
+        row_start = 4 + C_Attack_algorithm_library.index(cfg.ATTACKMETHOD)
+        bias = 0 if cfg.ATTACKTYPE=='UT'else 1
+        row = row_start+bias
+    else:
+        row_start = 4 + 2*len(C_Attack_algorithm_library)+4*R_Attack_algorithm_library.index(cfg.ATTACKMETHOD)
+        bias = attack_type.index(cfg.ATTACKTYPE+cfg.ATTACKDIRECTION)
+        row = row_start+bias
     
-    index = {}
-    index['mAP'] = pure_result['mAP']-att_result['mAP']
-    index['SSIM'] = 1-SSIM
-    index['index'] = index['mAP']/index['SSIM']
+    column = 4
+    
+    ans = {}
+    ans['mAP'] = pure_result['mAP']-att_result['mAP']
+    ans['SDSIM'] = 1-SSIM
+    ans['index'] = ans['mAP']/ans['SDSIM']
 
-    for i in range(len(evaluation_attackIndex)):
-        sheet[get_column_letter(column+i)+str(row_start)] = index[evaluation_attackIndex[i]]
+    for i,indicator in enumerate(evaluation_attackIndex):
+        sheet[get_column_letter(column+i)+str(row)] =ans[indicator]
 
 
 def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,save_pos= excel_name):
@@ -295,10 +297,10 @@ def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,save_pos= e
         sheet_AI = wb.create_sheet(title = sheet_attackIndex_name)
     sheet_init(sheet)
     sheet_AI_init(sheet_AI)
-    if def_result!=None and def_adv_result != None:
+    if def_result!=None or def_adv_result != None:
         save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
-
-    save_attack_index(cfg,pure_result,att_result,SSIM,sheet_AI)
+    if pure_result!=None and att_result!=None and SSIM !=None:
+        save_attack_index(cfg,pure_result,att_result,SSIM,sheet_AI)
     #save_config(cfg,pure_result,adv_result,def_adv_result,sheet)
     remove_Sheet(wb,sheet_list)
     wb.save(save_pos)
@@ -351,6 +353,17 @@ def pairwise_distance(x, y):
     dist.addmm_(x, y.t(), beta=1, alpha=-2)
     dist = dist.clamp(min=1e-12).sqrt()
     return dist
+
+def CHW_to_HWC(images):
+    # compare_ssim function in sklearn is used for HWC images
+    # this function was used to transform CHW images to HWC images
+    # (size)3x256x128 -> (size)256x128x3
+    images = images.cpu()
+    images = images.permute(1,2,0)
+    # tensor.permute()
+    # change dimension of tensor, only tensor
+    # previous dimension C(0),H(1),W(2) to H(1),W(2),C(0) 
+    return images.detach().numpy()
 
 
 def mkdir(path):

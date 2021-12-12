@@ -3,14 +3,10 @@ import torch
 import torch.nn as nn
 from torch.nn import Parameter
 from copy import deepcopy
-
-from fastreid.engine import DefaultTrainer
-from fastreid.modeling.heads.build import build_feature_heads
-from fastreid.utils.checkpoint import Checkpointer
 import torch.optim as optim
 
-from fastreid.utils.reid_patch import get_train_set, release_cuda_memory, save_image
-
+from fastreid.utils.reid_patch import get_train_set
+device = 'cuda'
 def l2normalize(v, eps=1e-12):
     return v / (v.norm() + eps)
 
@@ -88,7 +84,6 @@ class ResnetBlock(nn.Module):
         out = x + self.conv_block(x)
         return out
 
-
 class SSAE(nn.Module):
     def __init__(self, input_nc=3, output_nc=3, ngf=32, norm='bn', n_blocks=6):
         super(SSAE, self).__init__()
@@ -154,7 +149,7 @@ class SSAE(nn.Module):
         mask = self.mask_decoder_3(mask)
 
         return delta, mask
-device = 'cuda'
+
 def _batch_clamp_tensor_by_vector(vector, batch_tensor):
     """Equivalent to the following
     for ii in range(len(vector)):
@@ -211,78 +206,156 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-def SSAE_attack(cfg,query_data_loader,pos):
 
-    model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.heads = build_feature_heads(cfg)
-    model.to(device)
-    Checkpointer(model).load(cfg.MODEL.WEIGHTS)
+class Generator:
+    def __init__(self,generator) -> None:
+        self.generator = generator
+        self.generator.eval()
+        self.delta = 0.1
+        self.clip_min = 0.0
+        self.clip_max = 1.0
 
+    def __call__(self, images, y) :
+        # y is not used in SSAE, Just for universal adaptation
+        if len(images.shape)==5:
+            return self.GA(images)
+
+        with torch.no_grad():
+            perturbations, saliency_map = self.generator(images)
+
+        images = images.to(device)
+        perturbations = perturbations.detach().to(device)
+        saliency_map = saliency_map.detach().to(device)
+        
+        adv_imgs = images + batch_clamp(self.delta, perturbations) * saliency_map
+        adv_imgs = torch.clamp(adv_imgs, min=self.clip_min, max=self.clip_max)
+
+        print('adv-ori',adv_imgs-images)
+        return adv_imgs
+
+    def GA(self,images):
+
+        _,N,_,_,_ = images.shape
+
+        new_images = []
+        for i in range(N):
+            img = images[:,i,:,:,:].clone()
+            with torch.no_grad():
+                perturbations, saliency_map = self.generator(img)
+
+            images = images.to(device)
+            perturbations = perturbations.detach().to(device)
+            saliency_map = saliency_map.detach().to(device)
+        
+            adv_imgs = images + batch_clamp(self.delta, perturbations) * saliency_map
+            adv_imgs = torch.clamp(adv_imgs, min=self.clip_min, max=self.clip_max)
+            new_images.append(adv_imgs)
+
+        new_images = torch.stack(new_images)
+        new_images = new_images.permute(1,0,2,3,4)
+        return new_images
+        
+def make_SSAE_generator(cfg,model,pretrained=False):
 
     generator = SSAE().to(device)
     generator = nn.DataParallel(generator)
+    save_pos = './model/generator_weights.pth'
     generator.train()
     train_loader = get_train_set(cfg)
     cosine_loss = CosineLoss().to(device)
     optimizer = optim.Adam(generator.parameters(), lr=1e-4)
     mse_loss = nn.MSELoss(reduction='sum').to(device)
 
-    EPOCHS = 10
+    EPOCHS = 5
     delta = 0.1
     alpha = 0.0001
-    for epoch in range(EPOCHS):
-        stats = ['angular_loss', 'loss']
-        meters_trn = {stat: AverageMeter() for stat in stats}
-        generator.train()
 
-        for batch_idx, data in enumerate(train_loader):
-            if batch_idx>4000:
-                break
-        
-            raw_imgs= data['images'].to(device)
-            # perturb images
+    if not pretrained:
+        for epoch in range(EPOCHS):
+
+            print(f'start epoch {epoch} training for SSAE')
+            stats = ['angular_loss', 'loss']
+            meters_trn = {stat: AverageMeter() for stat in stats}
+            generator.train()
+
+            for batch_idx, data in enumerate(train_loader):
             
-            perturbations, saliency_map = generator(raw_imgs)
-            perturbations = batch_clamp(delta, perturbations)
+                if batch_idx>4000:
+                    break
+                
+                raw_imgs= (data['images']/255.0).to(device)
+                # perturb images
+                
+                perturbations, saliency_map = generator(raw_imgs)
+                perturbations = batch_clamp(delta, perturbations)
 
-            adv_imgs =  raw_imgs + perturbations
-            adv_imgs = torch.clamp(adv_imgs, min=0.0, max=255.0)
-            # extract features from imgs and adv_imgs
-            raw_feats = model(raw_imgs)
-            raw_norms = torch.norm(raw_feats, dim=1)
-            raw_feats = nn.functional.normalize(raw_feats, dim=1, p=2)
-            adv_feats = model(adv_imgs)
-            adv_norms = torch.norm(adv_feats, dim=1)
-            adv_feats = nn.functional.normalize(adv_feats, dim=1, p=2)
+                adv_imgs =  raw_imgs + perturbations
+                adv_imgs = torch.clamp(adv_imgs, min=0.0, max=1.0)
+                # extract features from imgs and adv_imgs
+                raw_feats = model(raw_imgs)
+                raw_norms = torch.norm(raw_feats, dim=1)
+                raw_feats = nn.functional.normalize(raw_feats, dim=1, p=2)
+                adv_feats = model(adv_imgs)
+                adv_norms = torch.norm(adv_feats, dim=1)
+                adv_feats = nn.functional.normalize(adv_feats, dim=1, p=2)
 
-            angular_loss = cosine_loss(raw_feats, adv_feats)
-            loss = angular_loss
+                angular_loss = cosine_loss(raw_feats, adv_feats)
+                loss = angular_loss
 
-            norm_loss = mse_loss(raw_norms, adv_norms)
-            frobenius_loss = torch.norm(saliency_map, dim=(1,2), p=2).sum()
-            loss += alpha * (norm_loss + frobenius_loss)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                for k in stats:
+                    v = locals()[k]
+                    meters_trn[k].update(v.item(), 32)
 
-            for k in stats:
-                v = locals()[k]
-                meters_trn[k].update(v.item(), 32)
-    
-    release_cuda_memory()
-    generator.eval()
-    for batch_idx, data in enumerate(query_data_loader):
+        for epoch in range(EPOCHS):
 
-        print('batch idx = ',batch_idx)
-        raw_imgs= data['images'].to(device)
-        path = data['img_paths']
-        # perturb images
-        perturbations, saliency_map = generator(raw_imgs)
+            print(f'start epoch {epoch} training for SSAE')
+            stats = ['angular_loss', 'norm_loss', 'frobenius_loss', 'loss']
+            meters_trn = {stat: AverageMeter() for stat in stats}
+            generator.train()
+
+            for batch_idx, data in enumerate(train_loader):
+            
+                if batch_idx>4000:
+                    break
+                
+                raw_imgs= (data['images']/255.0).to(device)
+                # perturb images
+                
+                perturbations, saliency_map = generator(raw_imgs)
+                perturbations = batch_clamp(delta, perturbations)
+
+                adv_imgs =  raw_imgs + perturbations * saliency_map
+                adv_imgs = torch.clamp(adv_imgs, min=0.0, max=1.0)
+                # extract features from imgs and adv_imgs
+                raw_feats = model(raw_imgs)
+                raw_norms = torch.norm(raw_feats, dim=1)
+                raw_feats = nn.functional.normalize(raw_feats, dim=1, p=2)
+                adv_feats = model(adv_imgs)
+                adv_norms = torch.norm(adv_feats, dim=1)
+                adv_feats = nn.functional.normalize(adv_feats, dim=1, p=2)
+
+                angular_loss = cosine_loss(raw_feats, adv_feats)
+                loss = angular_loss
+
+                norm_loss = mse_loss(raw_norms, adv_norms)
+                frobenius_loss = torch.norm(saliency_map, dim=(1,2), p=2).sum()
+                loss += alpha * (norm_loss + frobenius_loss)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                for k in stats:
+                    v = locals()[k]
+                    meters_trn[k].update(v.item(), 32)
+
+        torch.save(generator.state_dict(), save_pos)
+    else:
+        generator.load_state_dict(torch.load(save_pos))
         
-        perturbations = batch_clamp(delta, perturbations)
-
-        adv_imgs = raw_imgs + perturbations * saliency_map
-        adv_imgs = torch.clamp(adv_imgs, min=0.0, max=255.0)
-
-        save_image(adv_imgs/255.0,path,pos)
+    SSAE_generator = Generator(generator)
+    return SSAE_generator

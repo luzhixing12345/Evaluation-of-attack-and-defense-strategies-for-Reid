@@ -4,15 +4,16 @@ import copy
 import torch
 import torch.nn as nn
 import numpy as np
+import skimage
 from fastreid.engine import DefaultTrainer
 from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.attack_patch.attack_algorithm import *
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, get_query_set
+from fastreid.utils.reid_patch import CHW_to_HWC, change_preprocess_image, get_query_set
 
 
 from fastreid.utils.compute_dist import build_dist
-
+device = 'cuda'
 
 class GalleryAttack:
     '''
@@ -22,6 +23,7 @@ class GalleryAttack:
         self.cfg = cfg
         self.batch_size = cfg.TEST.IMS_PER_BATCH
         self.direction  = cfg.ATTACKDIRECTION
+        self.pretrained = cfg.ATTACKPRETRAINED
         self.target = True if self.direction=='+' else False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
@@ -41,8 +43,14 @@ class GalleryAttack:
         self.rank={}
         for indicator in evaluation_indicator:
             self.rank[indicator]=0
+            
+        self.SSAE_generator = None
+        self.MISR_generator = None
+        if self.cfg.ATTACKMETHOD=='SSAE':
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD=='MISR':
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,self.model,ak_type=-1,pretrained=self.pretrained)
 
-        
     def pretreatment(self):
         test_dataset,self.num_query = DefaultTrainer.build_test_loader(self.cfg,dataset_name=self.cfg.DATASETS.NAMES[0])
         images = []
@@ -62,7 +70,7 @@ class GalleryAttack:
         pids = torch.cat(pids, dim=0).numpy()
         camids = torch.cat(camids,dim=0).numpy()
 
-        self.quer_images = images[:self.num_query]
+        self.query_images = images[:self.num_query]
         self.query_pids = pids[:self.num_query]
         self.query_camids = camids[:self.num_query]
         self.query_features = features[:self.num_query]
@@ -80,11 +88,6 @@ class GalleryAttack:
     def get_attack_method(self):
         
         mse = nn.MSELoss(reduction='sum')
-        def GA_MSE(f1s, f2s):
-            m = 0
-            for f1, f2 in zip(f1s, f2s):
-                m += mse(f1,f2)
-            return m
         def odfa(f1, f2):
             return mse(f1, -f2)
         def max_min_mse(f1s, f2s):
@@ -100,19 +103,25 @@ class GalleryAttack:
         eps=0.05
         eps_iter=1.0/255.0
         dict = {
-                    'R-FGSM'  :FGSM(self.cfg,self.model, mse, eps=eps,targeted=self.target),
-                    'R-IFGSM' :IFGSM(self.cfg,self.model, GA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                    'R-MIFGSM':MIFGSM(self.cfg,self.model,GA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-                    'ODFA'    :IFGSM(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                    'SMA'     :IFGSM(self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
-                    'FNA'     :IFGSM(self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-                }
+            'R-FGSM'  :FGSM(self.cfg,self.model, mse, eps=eps,targeted=self.target),
+            'R-IFGSM' :IFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'R-MIFGSM':MIFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'ODFA'    :ODFA(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
+            'SMA'     :IFGSM(self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
+            'FNA'     :IFGSM(self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'SSAE'    :self.SSAE_generator,
+            'MISR'    :self.MISR_generator,
+            'MUAP'    :MUAP(self.cfg,self.model)
+        }
         return dict[self.cfg.ATTACKMETHOD]
 
-    def attack_images(self,features,selected_images):
+    def attack_images(self,features,selected_images,target):
 
         attack_method = self.get_attack_method()
-        new_selected_samples = attack_method(selected_images,features)
+        if self.cfg.ATTACKMETHOD =='MUAP':
+            new_selected_samples = attack_method(selected_images,target)
+        else:
+            new_selected_samples = attack_method(selected_images,features)
 
         return new_selected_samples
 
@@ -133,16 +142,14 @@ class GalleryAttack:
             keep = np.invert(remove)
 
             if direction=='+':
-                M = 1
-                # random sampling from populationfor QA+
+                # random sampling from populationfor GA+
                 sample_pos = torch.randint(len(self.indices[q_idx][keep]), (10,))  # [output_0,M]
                 sample_id  = self.indices[q_idx][keep][sample_pos]
 
                 selected_images.append(self.gallery_images[sample_id])
                 selected_ids.append(torch.tensor(sample_id))
             else :
-                M = 1
-                # random sampling from top-3M for QA-
+                # random sampling from top-3M for GA-
                 sample_id = self.indices[q_idx][keep][:10]
 
                 selected_images.append(self.gallery_images[sample_id])
@@ -152,13 +159,22 @@ class GalleryAttack:
         selected_ids  =  torch.stack(selected_ids)
         return selected_images,selected_ids
 
-    def evaluate(self,id,image_features,selected_ids,new_selected_images):
+    def evaluate(self,id,image_features,selected_ids,selected_images,new_selected_images):
         
         size,N= selected_ids.shape
         id = id*self.batch_size
         # use size instead of batch size is because query set may not be divisible by batch_size and there
         # may be a few images left as remainder
+        SSIM = 0
+        for i in range(size):
+            for j in range(N):
+                image1 = CHW_to_HWC(selected_images[i][j])
+                image2 = CHW_to_HWC(new_selected_images[i][j])
+                SSIM += skimage.measure.compare_ssim(image1,image2,multichannel=True)
         
+        SSIM/=size*N
+        self.SSIM += SSIM
+
         for i in range(size):
             q_idx = id+i
             # deepcopy gallery features and replace the corresponding postion with the after-attack gallery images
@@ -168,7 +184,7 @@ class GalleryAttack:
             # selected ids(size) = batch_size x N(10)
             for j in range(N):
                 with torch.no_grad():
-                    features = self.model(new_selected_images[j])
+                    features = self.model(new_selected_images[:,j,:,:,:])
                 #features(size) = size x 2048
                 gallery_features[selected_ids[i][j]]=features[i]
 
@@ -187,6 +203,7 @@ class GalleryAttack:
             tmp_cmc = [x / (i + 1.) for i, x in enumerate(tmp_cmc)]
             tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
             AP = tmp_cmc.sum() / num_rel
+
             for r in [1, 5, 10]:
                 self.rank['Rank-{}'.format(r)] += cmc[r - 1]>=1
             self.rank['mAP']+=AP
@@ -196,24 +213,27 @@ class GalleryAttack:
         for indictor in self.rank.keys():
             self.rank[indictor]=self.rank[indictor]*100.0/self.num_query
 
+        self.SSIM/=len(self.query_data_loader)
+
         print(self.rank)
-        raise
+        print('SSIM = ',self.SSIM)
+        return self.rank,self.SSIM
+        
 
     def attack(self):
         
-        query_data_loader = get_query_set(self.cfg)
-        for q_idx ,data in enumerate(query_data_loader):
+        self.query_data_loader = get_query_set(self.cfg)
+        for q_idx ,data in enumerate(self.query_data_loader):
             
-            images = (data['images']/255).clone().detach()
-            path = data['img_paths']
-            #images_orig = images.clone()
+            images = (data['images']/255).clone().to(device).detach()
+            target = data['targets'].to(device)
 
             selected_images,selected_ids= self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)
             with torch.no_grad():
                 features = self.model(images)
-            new_selected_images = self.attack_images(features,selected_images)
+            new_selected_images = self.attack_images(features,selected_images,target)
 
-            self.evaluate(q_idx,features,selected_ids,new_selected_images)
+            self.evaluate(q_idx,features,selected_ids,selected_images,new_selected_images)
 
             
 

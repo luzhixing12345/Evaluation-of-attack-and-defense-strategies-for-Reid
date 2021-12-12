@@ -8,7 +8,6 @@ from fastreid.engine import DefaultTrainer
 from fastreid.modeling.heads.build import build_heads
 from fastreid.utils.checkpoint import Checkpointer
 from advertorch.context import ctx_noparamgrad_and_eval
-from fastreid.utils.attack_patch.attack_patch import match_attack_method
 from fastreid.utils.reid_patch import change_preprocess_image
 device='cuda'
 def adversarial_defense_C(cfg,train_set):

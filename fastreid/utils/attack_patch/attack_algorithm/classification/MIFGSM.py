@@ -60,6 +60,8 @@ class MomentumIterativeAttack(Attack, LabelMixin):
                   - if self.targeted=True, then y must be the targeted labels.
         :return: tensor containing perturbed inputs.
         """
+        if(self.cfg.ATTACKTYPE=='GA'):
+            return self.perturb_GA(x,y)
         x, y = self._verify_and_process_inputs(x, y)
 
         delta = torch.zeros_like(x)
@@ -104,5 +106,59 @@ class MomentumIterativeAttack(Attack, LabelMixin):
 
         rval = x + delta.data
         return rval
+
+    def perturb_GA(self, x, y):
+        _,N,_,_,_=x.shape
+
+        new_x = []
+        for i in range(N):
+            xadv = x[:,i,:,:,:].clone().detach()
+            xadv.requires_grad_()
+            delta = torch.zeros_like(xadv)
+            g = torch.zeros_like(xadv)
+
+            delta = nn.Parameter(delta)
+
+            for i in range(self.nb_iter):
+
+                if delta.grad is not None:
+                    delta.grad.detach_()
+                    delta.grad.zero_()
+
+                imgadv = xadv + delta
+                outputs = self.predict(imgadv)
+                loss = self.loss_fn(outputs, y)
+                if self.targeted:
+                    loss = -loss
+                loss.backward()
+
+                g = self.decay_factor * g + normalize_by_pnorm(
+                    delta.grad.data, p=1)
+                # according to the paper it should be .sum(), but in their
+                #   implementations (both cleverhans and the link from the paper)
+                #   it is .mean(), but actually it shouldn't matter
+                if self.ord == np.inf:
+                    delta.data += batch_multiply(self.eps_iter, torch.sign(g)*self.clip_max)
+                    delta.data = batch_clamp(self.eps, delta.data)
+                    delta.data = clamp(
+                        xadv + delta.data, min=self.clip_min, max=self.clip_max) - xadv
+                elif self.ord == 2:
+                    delta.data += self.eps_iter * normalize_by_pnorm(g, p=2)
+                    delta.data *= clamp(
+                        (self.eps * normalize_by_pnorm(delta.data, p=2) /
+                            delta.data),
+                        max=1.)
+                    delta.data = clamp(
+                        xadv + delta.data, min=self.clip_min, max=self.clip_max) - xadv
+                else:
+                    error = "Only ord = inf and ord = 2 have been implemented"
+                    raise NotImplementedError(error)
+
+            rval = xadv + delta.data
+            new_x.append(rval)
+
+        new_x = torch.stack(new_x)
+        new_x = new_x.permute(1,0,2,3,4)
+        return new_x    
 
 MIFGSM = MomentumIterativeAttack

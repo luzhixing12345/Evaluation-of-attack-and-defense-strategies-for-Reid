@@ -1,13 +1,12 @@
 
 
-import torch
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.attack_patch.attack_algorithm import *
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, classify_test_set, evaluate_ssim, get_query_set, get_result, save_image
-
+from fastreid.utils.reid_patch import CHW_to_HWC, change_preprocess_image, classify_test_set, get_query_set, get_result, save_image
+import skimage
 from ..attack_algorithm import *
-from fastreid.utils.advertorch.attacks import MomentumIterativeAttack,LinfPGDAttack,CarliniWagnerL2Attack
+
 
 class ClassificationAttack:
     '''
@@ -32,22 +31,37 @@ class ClassificationAttack:
         self.model.preprocess_image=change_preprocess_image(cfg) # re-range the input size to [0,1]
         Checkpointer(self.model).load(self.model_path)  # load trained model
 
+        self.SSIM=0
+
 
     def attack_images(self,images):
         adversary=self.match_attack_method(self.cfg,self.model,self.target)
         images = adversary(images)  
         return images.clone().detach()
 
+    def evaluate(self,images1,images2):
+        size = images1.shape[0]
+        SSIM = 0
+        for i in range(size):
+            image1 = CHW_to_HWC(images1[i].cpu())
+            image2 = CHW_to_HWC(images2[i].cpu())
+            SSIM += skimage.measure.compare_ssim(image1,image2,multichannel=True)
+        SSIM/=size
+        self.SSIM+=SSIM
+
+
     def get_result(self):
-        return get_result(self.cfg,self.cfg.MODEL.WEIGHTS,'attack'),evaluate_ssim(self.cfg)
+        self.SSIM/=len(self.query_data_loader)
+        return get_result(self.cfg,self.cfg.MODEL.WEIGHTS,'attack'),self.SSIM
 
     def attack(self):
         for _ ,data in enumerate(self.query_data_loader):
             images = (data['images']/255)
             path = data['img_paths']
-            images = self.attack_images(images)
+            adv_images = self.attack_images(images)
+            self.evaluate(images,adv_images)
 
-            save_image(images,path,'adv_query')
+            save_image(adv_images,path,'adv_query')
 
 
     def match_attack_method(self,cfg,model,target):
