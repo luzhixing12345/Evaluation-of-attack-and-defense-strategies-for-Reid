@@ -5,7 +5,7 @@ from torch.nn import Parameter
 from copy import deepcopy
 import torch.optim as optim
 
-from fastreid.utils.reid_patch import get_train_set
+from fastreid.utils.reid_patch import get_train_set, save_attack_index
 device = 'cuda'
 def l2normalize(v, eps=1e-12):
     return v / (v.norm() + eps)
@@ -269,13 +269,11 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     EPOCHS = 5
     delta = 0.1
     alpha = 0.0001
-
+    model.eval()
     if not pretrained:
         for epoch in range(EPOCHS):
 
             print(f'start epoch {epoch} training for SSAE')
-            stats = ['angular_loss', 'loss']
-            meters_trn = {stat: AverageMeter() for stat in stats}
             generator.train()
 
             for batch_idx, data in enumerate(train_loader):
@@ -290,7 +288,6 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 perturbations = batch_clamp(delta, perturbations)
 
                 adv_imgs =  raw_imgs + perturbations
-                adv_imgs = torch.clamp(adv_imgs, min=0.0, max=1.0)
                 # extract features from imgs and adv_imgs
                 raw_feats = model(raw_imgs)
                 raw_norms = torch.norm(raw_feats, dim=1)
@@ -306,15 +303,10 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 loss.backward()
                 optimizer.step()
 
-                for k in stats:
-                    v = locals()[k]
-                    meters_trn[k].update(v.item(), 32)
-
+        optimizer = optim.Adam(generator.parameters(), lr=1e-4)
         for epoch in range(EPOCHS):
 
             print(f'start epoch {epoch} training for SSAE')
-            stats = ['angular_loss', 'norm_loss', 'frobenius_loss', 'loss']
-            meters_trn = {stat: AverageMeter() for stat in stats}
             generator.train()
 
             for batch_idx, data in enumerate(train_loader):
@@ -329,7 +321,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 perturbations = batch_clamp(delta, perturbations)
 
                 adv_imgs =  raw_imgs + perturbations * saliency_map
-                adv_imgs = torch.clamp(adv_imgs, min=0.0, max=1.0)
+
                 # extract features from imgs and adv_imgs
                 raw_feats = model(raw_imgs)
                 raw_norms = torch.norm(raw_feats, dim=1)
@@ -349,13 +341,12 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 loss.backward()
                 optimizer.step()
 
-                for k in stats:
-                    v = locals()[k]
-                    meters_trn[k].update(v.item(), 32)
 
         torch.save(generator.state_dict(), save_pos)
+        print(f'save model weights in {save_pos}')
     else:
         generator.load_state_dict(torch.load(save_pos))
+        print(f'load model weights from {save_pos}')
         
     SSAE_generator = Generator(generator)
     return SSAE_generator
