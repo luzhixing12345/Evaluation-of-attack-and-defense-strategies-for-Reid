@@ -165,7 +165,7 @@ class QueryAttack:
         self.query_data_loader = get_query_set(self.cfg)
         for q_idx ,data in enumerate(self.query_data_loader):
             
-            images = (data['images']/255).clone().detach()
+            images = (data['images']/255).clone().to(device).detach()
             target = data['targets'].to(device)
             path = data['img_paths']
             #images_orig = images.clone()

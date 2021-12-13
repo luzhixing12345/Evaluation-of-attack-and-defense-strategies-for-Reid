@@ -243,11 +243,11 @@ class Generator:
             with torch.no_grad():
                 perturbations, saliency_map = self.generator(img)
 
-            images = images.to(device)
+            img = img.to(device)
             perturbations = perturbations.detach().to(device)
             saliency_map = saliency_map.detach().to(device)
         
-            adv_imgs = images + batch_clamp(self.delta, perturbations) * saliency_map
+            adv_imgs = img + batch_clamp(self.delta, perturbations) * saliency_map
             adv_imgs = torch.clamp(adv_imgs, min=self.clip_min, max=self.clip_max)
             new_images.append(adv_imgs)
 
@@ -259,14 +259,14 @@ def make_SSAE_generator(cfg,model,pretrained=False):
 
     generator = SSAE().to(device)
     generator = nn.DataParallel(generator)
-    save_pos = './model/generator_weights.pth'
+    save_pos = './model/SSAE_generator_weights.pth'
     generator.train()
     train_loader = get_train_set(cfg)
     cosine_loss = CosineLoss().to(device)
     optimizer = optim.Adam(generator.parameters(), lr=1e-4)
     mse_loss = nn.MSELoss(reduction='sum').to(device)
 
-    EPOCHS = 5
+    EPOCHS = 20
     delta = 0.1
     alpha = 0.0001
     model.eval()

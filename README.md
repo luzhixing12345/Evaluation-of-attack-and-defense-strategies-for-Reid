@@ -1,28 +1,73 @@
-# Evaluation and Study of Attack and Defense Strategies for Pedestrian Re-identification
+Evaluation and Study of Attack and Defense Strategies for Pedestrian Re-identification
+===
+
+
+# Introduction:
+
+This project is a national innovation project of the school of computer  science of Wuhan University in 2021. The project team consists of four members and our academic advisor.
+
+Our code is developed and expanded for the second time based on [fastreid](https://github.com/JDAI-CV/fast-reid). While trying to maintain the structural integrity of the source code, we have redesigned the evaluation framework for our purpose.
+
+# Installation
+
+## Requirements
+
+
+- Linux or macOS with python ≥ 3.6
+- PyTorch ≥ 1.6
+- torchvision that matches the Pytorch installation. You can install them together at [pytorch.org](https://pytorch.org/) to make sure of this.
+- [yacs](https://github.com/rbgirshick/yacs)
+- Cython (optional to compile evaluation code)
+- tensorboard (needed for visualization): `pip install tensorboard`
+- gdown (for automatically downloading pre-train model)
+- sklearn
+- termcolor
+- tabulate
+- [faiss](https://github.com/facebookresearch/faiss) `pip install faiss-cpu`
+- openpyxl
 
 
 
-此项目为武汉大学计算机学院2021年国家级大创项目，项目名称为*”**面向行人重识别的攻防策略评测及研究** “*
+## Set up with Conda
 
-所有代码基于京东开源数据库[fastreid](https://github.com/JDAI-CV/fast-reid)二次开发扩展
+```shell script
+conda create -n fastreid python=3.7
+conda activate fastreid
+conda install pytorch==1.6.0 torchvision tensorboard -c pytorch
+pip install -r docs/requirements.txt
+conda install Cython
+conda install yaml
+conda install scikit-image=0.15.0
+conda install -c conda-forge tensorboardx
+```
 
-其中特别感谢指导老师梁超老师，在整个过程中给予了我们莫大的支持和帮助，认真负责，在此谨代表全体成员向梁超老师致以真诚的感谢；
+# Use:
 
-另外感谢张圣尧学长，部分代码借鉴了其攻击防御思路，为本项目提供了重要参考借鉴价值；
+All detailed usage of the framework in [Use.md](Use.md)
 
-最后感谢张梦萱学姐，多次在组会中提出宝贵意见，协助小组成员取得项目进展；
+Main issues you may encounter will be listed in [Issues.md](Issues.md). If it doesn't solve your problem, please leave your issue and I will reply as soon as possible.
 
+# pretrained model
 
+You can use our framework to train a model yourself, or directly download our pretrained model to save your time
 
-#### 原fastreid框架流程解析：
-
-记录了笔者在使用fastreid进行测评任务，并且针对代码进行修改时的体会和心得，如果希望快速熟悉fastreid的整体框架流程请仔细阅读这一部分，见fastreid.md
-
-
-
-
+see more in [Model_zoo.md](Model_zoo.md)
 
 #### EVALUATION_Based_on_fastreid构建思路：
 
-等！
+我们评测会得到四个指标：
 
+- pure_result
+- att_result
+- def_result
+- def_att_result
+
+$$
+attackIndex=\frac{pure-attack}{SSIM}
+$$
+
+
+
+$$
+defenseIndex =\frac{\frac{defatt}{def}}{\frac{att}{pure}}
+$$

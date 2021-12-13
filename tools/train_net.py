@@ -74,7 +74,7 @@ def main(args):
     cfg.defrost()
     cfg.MODEL.BACKBONE.PRETRAIN = False
     cfg.MODEL.WEIGHTS='./model/model_.pth'
-    cfg.MODEL.WEIGHTS=cfg.MODEL.WEIGHTS[0:-4]+cfg.DATASETS.NAMES[0]+cfg.MODEL.WEIGHTS[-4:]
+    cfg.MODEL.WEIGHTS=cfg.MODEL.WEIGHTS[0:-4]+cfg.DATASETS.NAMES[0]+'_'+cfg.CFGTYPE+cfg.MODEL.WEIGHTS[-4:]
 
     # the final result conclude some evaluating indicator, which you can get from ./fastreid/utils/reid_patch.py
     # if you want to update or change it, you can find the computing method in fastreid\evaluation\reid_evaluation.py

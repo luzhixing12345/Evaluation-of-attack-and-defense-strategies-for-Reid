@@ -131,7 +131,7 @@ _C.ATTACKDIRECTION = ""  # "+" or "-"
 _C.ATTACKPRETRAINED = False
 
 _C.DEFENSEMETHOD=""
-
+_C.CFGTYPE = ""
 
 
 _C.TARGET = False

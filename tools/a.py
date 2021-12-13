@@ -2,9 +2,9 @@
 
 import torch
 
+import numpy as np
 
-a = torch.randint(10,(10,4,2))
-num = 5
+a = [1,2,3,4,5]
 
-b = torch.cat((a[0:num,:,:],a[num:,:,:]),1)
-print(b.shape)
+a = np.array(a)/255.0
+print(a)

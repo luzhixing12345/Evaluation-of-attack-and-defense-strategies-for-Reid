@@ -1,10 +1,12 @@
 
+import copy
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
 from torch.autograd import Variable
+import numpy as np
+device = 'cuda'
 
-attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
 
 def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=10):
 
@@ -39,36 +41,46 @@ def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=1
 
 
 
-
-
 class MUAP:
     def __init__(self,cfg,model) -> None:
+        torch.manual_seed(1)
         self.cfg = cfg
         self.model = model
         self.model.eval()
         self.scale_rate = 0.8
         self.radiu = 10
-        self.EPOCH = 50
-
-        torch.manual_seed(1)
-        
-        self.normalize_transform = T.Normalize(mean=cfg.MODEL.PIXEL_MEAN, std=cfg.MODEL.PIXEL_STD)
+        self.EPOCH = 500
+        mean = np.array(cfg.MODEL.PIXEL_MEAN)/255.0
+        std  = np.array(cfg.MODEL.PIXEL_STD)/255.0
+        self.normalize_transform = T.Normalize(mean=mean, std=std)
         self.g = torch.tensor([0.])
         self.pre_sat = 1.
         self.loss_fn1 = MapLoss()
         self.loss_fn2 = TVLoss(TVLoss_weight=10.)
+        self.pre_loss = np.inf
+
 
     def __call__(self, images,target):
         if len(images.shape)==5:
             return self.GA(images,target)
         
-        global attack_img
+        images = images.to(device)
+        attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+        attack_img.to(device)
+        
+        loss = 0
         for epoch in range(self.EPOCH):
-            attack_img = Variable(attack_img, requires_grad=True)
-            median_img = torch.add(images,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
+            
+            attack_img = self.normalize_transform(attack_img)
+            attack_img = attack_img.detach()
+            attack_img.requires_grad_()
+
+            median_img = torch.add(images,attack_img.to(device)).to(device)   #mix attack img and clean img
+            
+            
             feat = self.model(images)
             attack_feat = self.model(median_img)
-           
+        
             map_loss = self.loss_fn1(attack_feat, feat, target, 5)
             tvl_loss = self.loss_fn2(median_img)
             total_loss = tvl_loss + map_loss
@@ -77,25 +89,39 @@ class MUAP:
             self.model.zero_grad()
 
             attack_grad = attack_img.grad.data
-            attack_img, sat, g = attack_update(attack_img, attack_grad, pre_sat, g, self.scale_rate,epoch,self.radiu)
-            pre_sat = sat
+            attack_img, sat, self.g = attack_update(attack_img, attack_grad, self.pre_sat, self.g, self.scale_rate,epoch,self.radiu)
+            self.pre_sat = sat
 
-        return attack_img
+            loss += total_loss
+            avg_loss = loss/(epoch+1)
+
+            if avg_loss < self.pre_loss:
+                best_attack = attack_img
+                self.pre_loss = avg_loss
+            
+
+        images = torch.add(images,best_attack.to(device))
+        return images
     
     def GA(self,images,target):
 
-        global attack_img
 
-        _,N,_,_,_ = images.shape
-
+        size,N,_,_,_ = images.shape
+        attack_img = Variable(torch.rand(size,3, 256, 128), requires_grad=True)*1e-6
+        attack_img = attack_img.to(device)
+        attack_img = attack_img.detach()
+        attack_img.requires_grad_()
         new_images = []
         for i in range(N):
             img = images[:,i,:,:,:]
+
             for epoch in range(self.EPOCH):
                 attack_img = Variable(attack_img, requires_grad=True)
                 median_img = torch.add(img,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
-                feat = self.model(img)
-                attack_feat = self.model(median_img)
+                
+                with torch.no_grad():
+                    feat = self.model(img)
+                    attack_feat = self.model(median_img)
             
                 map_loss = self.loss_fn1(attack_feat, feat, target, 5)
                 tvl_loss = self.loss_fn2(median_img)
@@ -105,8 +131,9 @@ class MUAP:
                 self.model.zero_grad()
 
                 attack_grad = attack_img.grad.data
-                attack_img, sat, g = attack_update(attack_img, attack_grad, pre_sat, g, self.scale_rate,epoch,self.radiu)
-                pre_sat = sat
+                attack_img, sat, self.g = attack_update(attack_img, attack_grad, self.pre_sat, self.g, self.scale_rate,epoch,self.radiu)
+                self.pre_sat = sat
+
             new_images.append(img)
         
         new_images = torch.stack(new_images)
