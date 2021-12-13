@@ -17,4 +17,6 @@ termcolor
 scikit-learn
 tabulate
 gdown
-faiss-gpu
+faiss-cpu
+advertorch
+openpyxl
