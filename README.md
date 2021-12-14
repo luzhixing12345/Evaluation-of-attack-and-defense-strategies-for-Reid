@@ -53,21 +53,6 @@ You can use our framework to train a model yourself, or directly download our pr
 
 see more in [Model_zoo.md](Model_zoo.md)
 
-#### EVALUATION_Based_on_fastreid构建思路：
+# result
 
-我们评测会得到四个指标：
-
-- pure_result
-- att_result
-- def_result
-- def_att_result
-
-$$
-attackIndex=\frac{pure-attack}{SSIM}
-$$
-
-
-
-$$
-defenseIndex =\frac{\frac{defatt}{def}}{\frac{att}{pure}}
-$$
+# Reference
