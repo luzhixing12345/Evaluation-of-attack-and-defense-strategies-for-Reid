@@ -20,9 +20,12 @@
     so your choice must be in [`QA+`,`QA-`,`GA+`,`GA-`]
   - The second part is `attack algorithm`
     - classfication : [`C-FGSM`,`C-IFGSM`,`C-MIFGSM`,`CW`]
-    - retrieval :[`R-FGSM`,`R-IFGSM`,`R-MIFGSM`,`ODFA`,`MISR`,`MUAP`,`SSAE`]
+    - retrieval :[`R-FGSM`,`R-IFGSM`,`R-MIFGSM`,`ODFA`,`MISR`,`MUAP`,`SSAE`,`SMA`,`FNA`]
   - **attention**: `attack type` and `attack algorithm` must match, both in classification or retrieval, and two parts should sperated by `:`.
-- `--defense` (optional): use defense algorithm to defense the Reid model. **Need one argument.** The `defense algorithm` should be chosen in [`ADV`,`GRA`,`DIST`]
+- `--defense` (optional): use defense algorithm to defense the Reid model. **Need one argument.** The `defense algorithm` should be chosen in 
+  - general defense algorithm [`ADV`,`GRA`,`DIST`] 
+  - retrieval defense algorithm [`GOAT`,`EST`,`SES`,`PNP`]
+  but you don't need to distinguish between defense types
 - `-record` (optional) : to record your evaluation result. It will be saved in an excel in the root path as `./result.xlsx`. Except long python terminal outputs, all your works will be recorded in file `./log.txt` with a short and clear notes, you don't need to worry about that `log.txt` will be recovered because all the notes would be written at the end of the file. **No argument**
 - `--pretrained` (optional): use pretrained attack model. **No argument**. **Pay attention that** when you are using the attack algorithm `SSAE` or `MISR` , they both needs to train in training set first, it takes a long time to train. So the first time you use this attack algorithm you need to spend a long time on training it first, and **in the following evaluation you can add the argument in the command line to use your pretrained attack model** to avoid wasting time, or **directly download our pretrained attack model in [Model_zoo.md](Model_zoo.md) to save your first training time(about 24h+)
 
