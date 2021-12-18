@@ -20,14 +20,6 @@ class Attack(object):
         self.loss_fn = loss_fn
         self.clip_min = clip_min
         self.clip_max = clip_max
-        #query(Q) set class number of Market1501(M) and DukeMTMC(D)
-        self.M = 750       
-        self.D = 702
-    
-    def get_num_classes(self):
-        dict = {'M':self.M,'D':self.D}
-        key = self.cfg.DATASETS.NAMES[0][0]
-        return dict[key]
 
     def perturb(self, x, **kwargs):
         """Virtual method for generating the adversarial examples.
@@ -61,15 +53,6 @@ class LabelMixin(object):
         return y
 
     def _verify_and_process_inputs(self, x, y):
-
-        if y==None:             # y is none means it's a classification attack method
-            if self.targeted:
-                y = self._get_predicted_label(x)
-                num_classes = self.get_num_classes()
-                y = torch.randint(num_classes,y.shape)
-            else:
-                y = self._get_predicted_label(x)
-
             
         x = self.replicate_input(x)
         y = self.replicate_input(y)

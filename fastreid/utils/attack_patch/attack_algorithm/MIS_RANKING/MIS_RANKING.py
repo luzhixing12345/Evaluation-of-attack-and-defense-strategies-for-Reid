@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from fastreid.engine.defaults import DefaultTrainer
+from fastreid.modeling.heads.build import build_heads
 from fastreid.utils.checkpoint import Checkpointer
 from .GD import Generator, MS_Discriminator, Pat_Discriminator, GANLoss, weights_init
 from .advloss import DeepSupervision, adv_CrossEntropyLoss, adv_CrossEntropyLabelSmooth, adv_TripletLoss
@@ -31,13 +32,21 @@ def check_freezen(net, need_modified=False, after_modified=None):
       # else: print('child', cc , 'was forzen')
     cc += 1
 
-def make_MIS_Ranking_generator(cfg,model,ak_type,pretrained=False):
+def make_MIS_Ranking_generator(cfg,ak_type,pretrained=False):
   # actually i couldn't understand why somebody write python code with two space indented instead of four???
   train_set = get_train_set(cfg)
   clf_criterion = adv_CrossEntropyLabelSmooth(num_classes=train_set.dataset.num_classes) if ak_type<0 else nn.MultiLabelSoftMarginLoss()
   metric_criterion = adv_TripletLoss(ak_type=ak_type)
   criterionGAN = GANLoss()   
-  check_freezen(model, need_modified=True, after_modified=False)
+
+  cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
+  model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
+  model.heads = build_heads(cfg)
+  model.preprocess_image=change_preprocess_image(cfg) # re-range the input size to [0,1]
+  Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+  model.to(device)
+
+  check_freezen(model, need_modified=True, after_modified=True)
 
   G = Generator(3, 3, 32, norm='bn').apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
@@ -49,19 +58,14 @@ def make_MIS_Ranking_generator(cfg,model,ak_type,pretrained=False):
   model = nn.DataParallel(model).cuda() 
   G = nn.DataParallel(G).cuda()
   D = nn.DataParallel(D).cuda()
-  G_save_pos = './model/G_weights.pth'
-  D_save_pos = './model/D_weights.pth'
+  G_save_pos = f'./model/G_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
+  D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
 
-  cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
-  model_classifier = DefaultTrainer.build_model_main(cfg)  # use baseline_train
-  model_classifier.preprocess_image=change_preprocess_image(cfg) # re-range the input size to [0,1]
-  Checkpointer(model_classifier).load("./model/test_trained.pth")  # load trained model
-
-
+  
   EPOCH = 10
   if not pretrained:
     for epoch in range(EPOCH):
-      train(cfg,epoch, G, D, model, model_classifier,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
+      train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
     
     torch.save(G.state_dict(), G_save_pos)
     torch.save(D.state_dict(), D_save_pos)
@@ -75,7 +79,7 @@ def make_MIS_Ranking_generator(cfg,model,ak_type,pretrained=False):
   return MIS_Ranking_generator
 
 
-def train(cfg,epoch, G, D, model, model_classifier,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, trainloader,ak_type):
+def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, trainloader,ak_type):
   G.train()
   D.train()
   global is_training
@@ -88,7 +92,8 @@ def train(cfg,epoch, G, D, model, model_classifier,criterionGAN, clf_criterion, 
     pids = data['targets'].cuda()
 
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
-    new_imgs = new_imgs.cuda()
+    new_imgs = new_imgs.clone().detach()
+    new_imgs.requires_grad_()
     mask = mask.cuda()
     # Fake Detection and Loss
     pred_fake_pool, _ = D(torch.cat((imgs, new_imgs.detach()), 1))
@@ -104,14 +109,12 @@ def train(cfg,epoch, G, D, model, model_classifier,criterionGAN, clf_criterion, 
     loss_G_GAN = criterionGAN(pred_fake, True)               
     
     # Re-ID advloss
-    with torch.no_grad():
-      features = model(new_imgs)
-      logits = model_classifier(new_imgs)
-    
-    softmax = nn.Softmax(dim=1)
-    probabilities = softmax(logits)
+    model.train()
+    output = model(new_imgs)
+    features = output["features"]
+    logits = output['pred_class_logits']
 
-    new_outputs = probabilities.argmax(dim=1,keepdim=True)
+    new_outputs = logits
     new_features = features.view(features.size(0), -1)
 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0

@@ -58,7 +58,7 @@ class adv_CrossEntropyLabelSmooth(nn.Module):
     # for i in range(n):
     #   while adv_target[i] == pids[i]:
     #     adv_target[i] = random.randint(0, self.num_classes)
-    logits = torch.tensor(logits,dtype=torch.int64)
+    # logits = torch.tensor(logits,dtype=torch.int64)
     log_probs = self.logsoftmax(logits)
     adv_target = torch.zeros(log_probs.size()).scatter_(1, adv_target.unsqueeze(1).data.cpu(), 1)
     smooth = torch.ones(log_probs.size()) / (self.num_classes-1)
@@ -87,7 +87,7 @@ class adv_TripletLoss(nn.Module):
 
       dist = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(n, n)
       dist = dist + dist.t()
-      dist.addmm_(1, -2, features, features.t())
+      dist.addmm_(features, features.t(),beta =1, alpha=-2)
       dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
 
       if self.ak_type < 0: 

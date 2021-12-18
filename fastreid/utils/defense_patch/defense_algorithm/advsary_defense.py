@@ -8,7 +8,7 @@ from fastreid.engine import DefaultTrainer
 from fastreid.modeling.heads.build import build_heads
 from fastreid.utils.checkpoint import Checkpointer
 from advertorch.context import ctx_noparamgrad_and_eval
-from fastreid.utils.reid_patch import change_preprocess_image
+from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set
 device='cuda'
 def adversarial_defense_C(cfg,train_set):
     
@@ -48,52 +48,6 @@ def adversarial_defense_C(cfg,train_set):
     Checkpointer(model,'model').save('def_trained')
     print('Successfully saved the adv_trained model !')
 
-
-def adversarial_defense_SMA(cfg,train_set):
-
-    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
-    model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.heads = build_heads(cfg)
-    model.to(device)
-    Checkpointer(model).load(cfg.MODEL.WEIGHTS)
-
-    optimizer = DefaultTrainer.build_optimizer(cfg, model)
-    adversary=match_attack_method(cfg,model,train_set)
-    adversary.clip_max=255.0
-
-    alpha = 0.5     # mixing ratio between clean data and attack data,and it represents the ratio of clean data 
-    max_id = 4000   # the max trainging epoch ,since training set has so many groups, 4000 is a proper choice
-
-    model.train()
-    for idx ,data in enumerate(train_set):
-        if idx>max_id:
-            break
-        clean_data = data['images'].to(device)
-        output_clean = model(clean_data)
-
-        raw_features = output_clean["features"]
-        with ctx_noparamgrad_and_eval(model):
-            adv_data = adversary.perturb(clean_data,raw_features.to(device))
-        
-        targets = data['targets'].to(device)
-        optimizer.zero_grad()
-        
-        output_att = model(adv_data)
-        
-        loss_dict_att = model.losses(output_att, targets)
-        loss_dict_clean = model.losses(output_clean,targets)
-
-        losses_att = sum(loss_dict_att.values())
-        losses_clean = sum(loss_dict_clean.values())
-        loss = alpha*losses_clean+(1-alpha)*losses_att
-
-        loss.backward()
-        optimizer.step()
-        
-    print('finished adv_training !')
-    print('--------------------------------')
-    Checkpointer(model,'model').save('def_trained')
-    print('Successfully saved the adv_trained model !')
 
 def adversarial_defense_FNA(cfg,train_set):
     
@@ -192,3 +146,19 @@ def adversarial_defense_FNA(cfg,train_set):
     print('--------------------------------')
     Checkpointer(model,'model').save('def_trained')
     print('Successfully saved the adv_trained model !')
+
+
+class adversary_defense:
+
+    def __init__(self,cfg) -> None:
+        self.cfg = cfg
+        self.train_set = get_train_set(self.cfg)
+
+    def get_defense_result(self):
+        return get_result(self.cfg,self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'defense')
+
+    def defense(self):
+        pass
+
+
+    

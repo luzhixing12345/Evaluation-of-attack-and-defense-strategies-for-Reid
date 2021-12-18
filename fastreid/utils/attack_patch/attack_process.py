@@ -13,21 +13,24 @@ attack_type = ['QA','GA']
 # R_Attack_algorithm_library=['SMA','FNA','MIS-RANKING']
 # Attack_algorithm_library=C_Attack_algorithm_library+R_Attack_algorithm_library
 
-def attack(cfg):
-    if cfg.ATTACK_C:
-        CA = ClassificationAttack(cfg)
-        CA.attack()
-        return CA.get_result()
-    
-    else :
-        if cfg.ATTACKTYPE=='QA':
-            QA = QueryAttack(cfg)
-            QA.attack()
-            return QA.get_result()
+class attack:
+
+    def __init__(self,cfg) -> None:
+        self.cfg = cfg
+        self.AttackProcess = self.initalization()
+
+    def initalization(self):
+        if self.cfg.ATTACKTYPE=='QA':
+            QA = QueryAttack(self.cfg)
+            return QA
         else :
-            GA = GalleryAttack(cfg)
-            GA.attack()
-            return GA.get_result()
+            GA = GalleryAttack(self.cfg)
+            return GA
+    def start_attack(self):
+        self.AttackProcess.attack()
+
+    def get_result(self):
+        return self.AttackProcess.get_result()
 
 
 

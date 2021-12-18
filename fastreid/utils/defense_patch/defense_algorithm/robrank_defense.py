@@ -2,20 +2,30 @@
 
 
 import functools as ft
-
 import torch.nn.functional as F
-import torch.nn as nn
 import torch
 import numpy as np
 from fastreid.engine import DefaultTrainer
 from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image
+from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set
+from .robrank import *
 margin_cosine: float = 0.2
 margin_euclidean: float = 1.0
 device = 'cuda'
 
-def robrank_defense(cfg,train_set,str):
+class robrank_defense:
+    def __init__(self,cfg) -> None:
+        self.cfg = cfg
+        self.train_set = get_train_set(self.cfg)
+
+    def get_defense_result(self):
+        return get_result(self.cfg,self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'defense')
+
+    def defense(self):
+        RobRank_defense(self.cfg,self.train_set,self.cfg.DEFENSEMETHOD)
+
+def RobRank_defense(cfg,train_set,str):
     if str =='SES':
         train_step = ses_training_step
     elif str == 'EST':
@@ -26,14 +36,15 @@ def robrank_defense(cfg,train_set,str):
         raise KeyError
 
     model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.preprocess_image = change_preprocess_image(cfg) 
+    model.preprocess_image = change_preprocess_image(cfg)
     model.heads = build_feature_heads(cfg)
     model.to(device)
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
     max_id =4000
-    optimizer = DefaultTrainer.build_optimizer(cfg, model)
-
+    optimizer = DefaultTrainer.build_optimizer(cfg,model)
+    
+    model.train()
     for id,data in enumerate(train_set):
         if id>=max_id:
             break
@@ -44,7 +55,7 @@ def robrank_defense(cfg,train_set,str):
         optimizer.step()
     
     print(f'finished {str}_training !')
-    Checkpointer(model,'model').save('def_trained')
+    Checkpointer(model,'model').save(f'{str}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {str}_trained model !')
 
 def est_training_step(model, batch, *, pgditer: int = 24):
@@ -71,18 +82,16 @@ def est_training_step(model, batch, *, pgditer: int = 24):
     # set shape
 
     # generate adv examples
-    model.wantsgrad = True
     model.eval()
     advimgs = advrank.embShift(images)
     model.train()
     output = model(advimgs)
-    model.wantsgrad = False
     # compute loss
     loss = ptriplet()(output, labels)
 
     return loss
 
-def mmt_training_step(model: torch.nn.Module, batch, batch_idx):
+def mmt_training_step(model: torch.nn.Module, batch):
     '''
     min-max triplet
     '''
@@ -120,7 +129,7 @@ def mmt_training_step(model: torch.nn.Module, batch, batch_idx):
         pnemb[2 * len(pnemb) // 3:]).mean()
     return loss
 
-def pnp_training_step(model: torch.nn.Module, batch, batch_idx, *,
+def pnp_training_step(model: torch.nn.Module, batch, *,
                       pgditer: int = 24):
     '''
     Adversarial training with Positive/Negative Perplexing (PNP) Attack.
@@ -143,9 +152,8 @@ def pnp_training_step(model: torch.nn.Module, batch, batch_idx, *,
     images, labels = batch['images'].to(device), batch['targets'].to(device)
     model.eval()
     with torch.no_grad():
-        output_orig = model.forward(images)
+        output_orig = model(images)
         model.train()
-        loss_orig = model.lossfunc(output_orig, labels)
     # generate adversarial examples
     loss_fun = ptriplet()
     triplets = miner(output_orig, labels, method=loss_fun._minermethod,
@@ -161,7 +169,6 @@ def pnp_training_step(model: torch.nn.Module, batch, batch_idx, *,
                                     metric='N', verbose=False)
     # Collapsing positive and negative -- Anti-Collapse Triplet (ACT) defense.
     model.eval()
-    model.wantsgrad = True
     images_pnp = pnp.pncollapse(images, triplets)
     # Adversarial Training
     model.train()
@@ -169,14 +176,12 @@ def pnp_training_step(model: torch.nn.Module, batch, batch_idx, *,
     aemb = model(images[anc, :, :, :])
     pnemb = F.normalize(pnemb)
     aemb = F.normalize(aemb)
-    model.wantsgrad = False
     # compute adversarial loss
     model.train()
     loss = ptriplet().raw(aemb, pnemb[:len(pnemb) // 2],
                               pnemb[len(pnemb) // 2:]).mean()
 
     return loss
-
 
 def ses_training_step(model, batch):
     '''
@@ -190,7 +195,6 @@ def ses_training_step(model, batch):
     '''
     images, labels = batch['images'].to(device), batch['targets'].to(device)
     # generate adversarial examples
-    advatk_metric = model.metric
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
                       pgditer=24,
@@ -335,8 +339,8 @@ def __miner_spc2_random(repres: torch.Tensor, labels: torch.Tensor):
     negatives = torch.tensor(negs, dtype=torch.long, device=repres.device)
     return (anchors, positives, negatives)
 
-
 class PositiveNegativePerplexing(object):
+
     '''
     Attack designed for adversarial training
     '''
@@ -711,3 +715,25 @@ class PositiveNegativePerplexing(object):
         if self.verbose:
             print(images.shape)
         return images
+
+
+    '''
+    Factory of all types of loss functions used in ranking attacks
+    '''
+
+    def RankLossEmbShift(self, repv: torch.Tensor, repv_orig: torch.Tensor):
+        '''
+        Computes the embedding shift, we want to maximize it by gradient descent
+
+        Arguments:
+            repv: size(batch, embdding_dim), requires_grad.
+            repv_orig: size(batch, embedding_dim).
+        '''
+        if self.metric == 'C':
+            distance = 1 - F.cosine_similarity(repv, repv_orig)
+            # distance = -(1 - torch.mm(repv, repv_orig)).trace() # not efficient
+        elif self.metric in ('E', 'N'):
+            distance = F.pairwise_distance(repv, repv_orig)
+        loss = -distance.sum()
+        return (loss, None)
+

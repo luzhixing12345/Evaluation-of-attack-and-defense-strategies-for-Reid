@@ -1,6 +1,6 @@
 
 
-from ..utils import Attack,LabelMixin
+from .utils import Attack,LabelMixin
 import torch
 import torch.nn as nn
 import numpy as np

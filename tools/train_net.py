@@ -7,18 +7,16 @@
 import sys
 
 sys.path.append('.')
-from fastreid.utils.reid_patch import ( C_Attack_algorithm_library, R_Attack_algorithm_library, 
-                                        print_configCondition, 
-                                        print_info,record,
-                                        get_result, 
-                                        )
-from fastreid.utils.attack_patch.attack_process import attack
-from fastreid.utils.defense_patch.defense_patch import defense
-from fastreid.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from fastreid.config import get_cfg
+from fastreid.engine import (DefaultTrainer, default_argument_parser,
+                             default_setup, launch)
+from fastreid.utils.attack_patch.attack_process import attack
+from fastreid.utils.defense_patch.defense_process import defense
+from fastreid.utils.reid_patch import (
+                                       analyze_configCondition, get_result, print_info,
+                                       record)
 
-attack_R_type = ['QA+','QA-','GA+','GA-']
-attack_C_type = ['T','UT']
+
 
 def setup(args):
     """
@@ -28,31 +26,7 @@ def setup(args):
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     
-    if args.attack!=None:
-        try:
-            attack_type ,cfg.ATTACKMETHOD = args.attack.split(":")
-        except:
-            raise ValueError(f'input :{args.attack} is not correct, please check usage in USE.md')
-        if attack_type in attack_R_type:
-            cfg.ATTACKTYPE = attack_type[:-1]
-            cfg.ATTACKDIRECTION = attack_type[-1]
-        elif attack_type in attack_C_type:
-            cfg.ATTACKTYPE = attack_type
-        else:
-            raise ValueError(f"{attack_type} not found, please check usage in USE.md")
-        if cfg.ATTACKMETHOD in C_Attack_algorithm_library:
-            cfg.ATTACK_C = True
-            cfg.ATTACK_R = False
-        elif cfg.ATTACKMETHOD in R_Attack_algorithm_library:
-            cfg.ATTACK_C = False
-            cfg.ATTACK_R = True
-        else :
-            raise ValueError(f'{cfg.ATTACKMETHOD} not found, please check usage in USE.md')
-    if args.defense != None:
-        cfg.DEFENSEMETHOD = args.defense
-    if args.pretrained:
-        cfg.ATTACKPRETRAINED = True
-    print_configCondition(args,cfg)
+    cfg = analyze_configCondition(args,cfg)
     cfg.freeze()
     default_setup(cfg, args)
 
@@ -95,18 +69,22 @@ def main(args):
     # market1501  pic    target                  DukeMTMC   pic     target
     # query      3368    750                     query      2228    702
     # gallery   15913    751                     gallery    17661   1110
+    #                                            train      16522   702
     pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
 
     
-
     if args.attack:
         print_info('start attack')
-        att_result,SSIM= attack(cfg)
+        AttackProcess = attack(cfg)
+        AttackProcess.start_attack()
+        att_result,SSIM = AttackProcess.get_result()
         print('ssim = ',SSIM)
 
     if args.defense:
         print_info('start defense')
-        def_result,def_adv_result= defense(cfg)
+        DefenseProcess = defense(cfg)
+        DefenseProcess.start_defense()
+        def_result,def_adv_result= DefenseProcess.get_result()
 
     if args.record:
         record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM)

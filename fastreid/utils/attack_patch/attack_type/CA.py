@@ -16,7 +16,7 @@ class ClassificationAttack:
     def __init__(self, cfg) -> None:
         self.cfg = cfg
         self.target = True if cfg.ATTACKTYPE=='T' else False
-        self.model_path = "./model/test_trained.pth"
+        self.model_path = self.cfg.MODEL.TESTSET_TRAINED_WEIGHT
         self.default_setup()
 
 
@@ -71,7 +71,7 @@ class ClassificationAttack:
                 'C-FGSM'  :FGSM(cfg, model, eps = eps,targeted = target),
                 'C-IFGSM' :IFGSM(cfg,model, eps=eps, eps_iter=eps_iter, targeted=target),
                 'C-MIFGSM':MIFGSM(cfg,model, eps=eps, eps_iter=eps_iter, targeted=target, decay_factor=1.),
-                'CW'      :CW(cfg,model),
+                'CW'      :CW(cfg,model,confidence=0,max_iterations=5000),
                 }
         return dict[cfg.ATTACKMETHOD]
 

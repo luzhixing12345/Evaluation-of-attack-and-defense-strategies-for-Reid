@@ -104,7 +104,7 @@ class ReidEvaluator(DatasetEvaluator):
             rerank_dist = build_dist(query_features, gallery_features, metric="jaccard", k1=k1, k2=k2)
             dist = rerank_dist * (1 - lambda_value) + dist * lambda_value
 
-        cmc, all_AP, all_INP ,result_order,q_pid_save,g_pids_save= evaluate_rank(dist, query_pids, gallery_pids, query_camids, gallery_camids)
+        cmc, all_AP, all_INP = evaluate_rank(dist, query_pids, gallery_pids, query_camids, gallery_camids)
 
         mAP = np.mean(all_AP)
         mINP = np.mean(all_INP)

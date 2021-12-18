@@ -11,7 +11,7 @@ import skimage
 
 from fastreid.utils.compute_dist import build_dist
 
-device = 'cuda'
+device = "cuda" if torch.cuda.is_available() else "cpu"  
 class QueryAttack:
     '''
     do QA+- for retrieval algorithm
@@ -22,7 +22,6 @@ class QueryAttack:
         self.direction  = cfg.ATTACKDIRECTION
         self.pretrained = cfg.ATTACKPRETRAINED
         self.target = True if self.direction=='+' else False
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"  
         self.default_setup()
         self.pretreatment()
 
@@ -31,17 +30,14 @@ class QueryAttack:
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
         self.model.preprocess_image = change_preprocess_image(self.cfg) 
         self.model.heads = build_feature_heads(self.cfg)
-        self.model.to(self.device)
+        self.model.to(device)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
 
         self.SSIM=0
         self.SSAE_generator = None
         self.MISR_generator = None
-        if self.cfg.ATTACKMETHOD=='SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
-        elif self.cfg.ATTACKMETHOD=='MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,self.model,ak_type=-1,pretrained=self.pretrained)
-    
+        self.FNA_generator = None
+        
     def pretreatment(self):
         test_dataset,num_query = DefaultTrainer.build_test_loader(self.cfg,dataset_name=self.cfg.DATASETS.NAMES[0])
         pids = []
@@ -69,17 +65,29 @@ class QueryAttack:
         self.dist = build_dist(self.query_features, self.gallery_features, self.cfg.TEST.METRIC)
 
         self.indices = np.argsort(self.dist, axis=1)
-        self.matches = (self.gallery_pids[self.indices] == self.query_pids[:, np.newaxis]).astype(np.int32)#3368x15913
+
+        if self.cfg.ATTACKMETHOD =='SSAE':
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD =='MISR':
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,ak_type=-1,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD == 'FNA':
+            self.FNA_generator =FNA(self.cfg,
+                                    self.model,
+                                    self.indices,
+                                    self.query_pids,
+                                    self.query_camids,
+                                    self.gallery_pids,
+                                    self.gallery_camids,
+                                    self.gallery_features)
         
-    def attack_images(self,images,selected_features,target):
+    def attack_images(self,images,selected_features,target,q_idx):
 
         attack_method = self.get_attack_method()
-        if self.cfg.ATTACKMETHOD=='ODFA':
-            with torch.no_grad():
-                features = self.model(images)
-            adv_images = attack_method(images,features)
-        elif self.cfg.ATTACKMETHOD=='MUAP':
+
+        if self.cfg.ATTACKMETHOD=='MUAP':
             adv_images = attack_method(images,target)
+        elif self.cfg.ATTACKMETHOD=='FNA':
+            adv_images = attack_method(images,selected_features,q_idx)
         else :
             adv_images = attack_method(images,selected_features)
 
@@ -99,13 +107,12 @@ class QueryAttack:
             keep = np.invert(remove)
 
             if direction=='+':
-                # random sampling from populationfor QA+
-                sample_pos = torch.randint(len(self.indices[q_idx][keep]), (10,))  # [output_0,M]
-                sample_id  = self.indices[q_idx][keep][sample_pos]
+                # select bottom 10 images, and generally assume them to be ground false
+                sample_id = self.indices[q_idx][keep][-10:]
 
                 selected_features.append(self.gallery_features[sample_id])
             else :
-                # random sampling from top-3M for QA-
+                # select top 10 images, and generally assume them to be ground truth 
                 sample_id = self.indices[q_idx][keep][:10]
 
                 selected_features.append(self.gallery_features[sample_id])
@@ -122,30 +129,25 @@ class QueryAttack:
                 for f in f2:
                     m += mse(f1,f)
             return m
-        def odfa(f1, f2):
-            return mse(f1,-f2)
-        def max_min_mse(f1s, f2s):
-            # f1, f2 = fs[:,0,:], fs[:,1,:]
-            # return mse(x,f1) - mse(x,f2)
+
+        def QA_ODFA(f1s, f2s):
             m = 0
             for f1, f2 in zip(f1s, f2s):
-                for i in range(len(f2)-1):
-                    m += mse(f1,f2[i])
-                m -= mse(f1,f2[-1])
+                for f in f2:
+                    m += mse(f1,-f)
             return m
-
+        
         eps=0.05
         eps_iter=1.0/255.0
         dict = {
-            'R-FGSM'  :FGSM  (self.cfg,self.model, QA_MSE, eps=eps,targeted=self.target),
-            'R-IFGSM' :IFGSM (self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'R-MIFGSM':MIFGSM(self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-            'ODFA'    :ODFA  (self.cfg,self.model, odfa,   eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
-            'SMA'     :IFGSM (self.cfg,self.model, mse,    eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
-            'FNA'     :IFGSM (self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'FGSM'    :FGSM  (self.cfg,self.model, QA_MSE, eps=eps,targeted=self.target),
+            'IFGSM'   :IFGSM (self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.cfg,self.model, QA_MSE, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'ODFA'    :ODFA  (self.cfg,self.model, QA_ODFA,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.cfg,self.model)
+            'MUAP'    :MUAP(self.cfg,self.model),
+            'FNA'     :self.FNA_generator,
         }
         return dict[self.cfg.ATTACKMETHOD]
 
@@ -168,12 +170,12 @@ class QueryAttack:
             images = (data['images']/255).clone().to(device).detach()
             target = data['targets'].to(device)
             path = data['img_paths']
-            #images_orig = images.clone()
+
             images = images.requires_grad_()
 
             selected_features = self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)
             
-            adv_images = self.attack_images(images,selected_features,target)
+            adv_images = self.attack_images(images,selected_features,target,q_idx)
             self.evaluate(images,adv_images)
             
             save_image(adv_images,path,'adv_query')

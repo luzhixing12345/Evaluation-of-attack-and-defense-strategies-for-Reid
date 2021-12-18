@@ -1,10 +1,12 @@
 
 
 import torch
+a = torch.randint(10,(4,3))
 
-import numpy as np
+b = torch.randint(10,(1,3))
 
-a = [1,2,3,4,5]
-
-a = np.array(a)/255.0
+c = torch.cat((a,b))
 print(a)
+print(b)
+print(c)
+print(c.shape)

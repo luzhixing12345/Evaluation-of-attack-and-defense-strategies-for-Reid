@@ -46,10 +46,7 @@ class GalleryAttack:
             
         self.SSAE_generator = None
         self.MISR_generator = None
-        if self.cfg.ATTACKMETHOD=='SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
-        elif self.cfg.ATTACKMETHOD=='MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,self.model,ak_type=-1,pretrained=self.pretrained)
+        self.FNA_generator = None
 
     def pretreatment(self):
         test_dataset,self.num_query = DefaultTrainer.build_test_loader(self.cfg,dataset_name=self.cfg.DATASETS.NAMES[0])
@@ -84,6 +81,20 @@ class GalleryAttack:
 
         self.indices = np.argsort(self.dist, axis=1)
         self.matches = (self.gallery_pids[self.indices] == self.query_pids[:, np.newaxis]).astype(np.int32)#3368x15913
+
+        if self.cfg.ATTACKMETHOD=='SSAE':
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD=='MISR':
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,self.model,ak_type=-1,pretrained=self.pretrained)
+        elif self.cfg.ATTACKMETHOD == 'FNA':
+            self.FNA_generator = FNA(self.cfg,
+                                    self.model,
+                                    self.indices,
+                                    self.query_pids,
+                                    self.query_camids,
+                                    self.gallery_pids,
+                                    self.gallery_camids,
+                                    self.gallery_features)
         
     def get_attack_method(self):
         
@@ -107,21 +118,23 @@ class GalleryAttack:
             'R-IFGSM' :IFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
             'R-MIFGSM':MIFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
             'ODFA'    :ODFA(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
-            'SMA'     :IFGSM(self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter ,targeted=self.target,rand_init=False),
-            'FNA'     :IFGSM(self.cfg,self.model, max_min_mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.cfg,self.model)
+            'MUAP'    :MUAP(self.cfg,self.model),
+            'FNA'     :self.FNA_generator
         }
         return dict[self.cfg.ATTACKMETHOD]
 
-    def attack_images(self,features,selected_images,target):
+    def attack_images(self,features,selected_images,target,q_idx):
 
         attack_method = self.get_attack_method()
         if self.cfg.ATTACKMETHOD =='MUAP':
             new_selected_samples = attack_method(selected_images,target)
+        elif self.cfg.ATTACKMETHOD=='FNA':
+            new_selected_samples = attack_method(selected_images,features,q_idx)
         else:
             new_selected_samples = attack_method(selected_images,features)
+
 
         return new_selected_samples
 
@@ -231,7 +244,7 @@ class GalleryAttack:
             selected_images,selected_ids= self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)
             with torch.no_grad():
                 features = self.model(images)
-            new_selected_images = self.attack_images(features,selected_images,target)
+            new_selected_images = self.attack_images(features,selected_images,target,q_idx)
 
             self.evaluate(q_idx,features,selected_ids,selected_images,new_selected_images)
 

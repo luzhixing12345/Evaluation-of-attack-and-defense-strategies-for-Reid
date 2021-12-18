@@ -3,7 +3,7 @@
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import get_train_set
+from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
@@ -12,43 +12,44 @@ from torch import Tensor
 device='cuda'
 def gradient_regulation(cfg,train_data_loader):
     # train a robust model again with another defense machanism
-
-    train_cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
-
-    model = DefaultTrainer.build_model_main(train_cfg)  #启用baseline_for_defense
-    Checkpointer(model).load(train_cfg.MODEL.WEIGHTS)  # load trained model
     
-    #optimizer = optim.Adam(model.parameters(),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5)
-    #optimizer = optim.SGD(model.parameters(),lr=0.00001,weight_decay=1e-5) # for bot_r50
-    optimizer = DefaultTrainer.build_optimizer(train_cfg, model)
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
+    model = DefaultTrainer.build_model_main(cfg)  #启用baseline_for_defense
+    model.preprocess_image = change_preprocess_image(cfg)
+    Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
+    model.to(device)
+
+    optimizer = DefaultTrainer.build_optimizer(cfg, model)
     
     loss_fun = nn.CrossEntropyLoss()
     loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
-
     max_id = 4000
-    
-    model.train()
-    
-    for batch_idx,data in enumerate(train_data_loader):
-        if batch_idx>max_id :
-            break
-        clean_data = data['images']
-        targets = data['targets'].to(device)
-        optimizer.zero_grad()
-        clean_data = clean_data.requires_grad_().to(device)
-        model.eval()
-        logits = model(clean_data)
+    EPOCH = 5
+
+    for epoch in range(EPOCH):
+        loss_total = 0
+        print(f'start epoch {epoch} for gradient regulation defense')
         model.train()
-        loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
-        loss.backward()
-        optimizer.step()
+        for batch_idx,data in enumerate(train_data_loader):
+            if batch_idx>max_id :
+                break
+            clean_data = (data['images']/255.0).to(device)
+            clean_data = clean_data.detach()
+            clean_data.requires_grad_()
+            targets = data['targets'].to(device)
+
+            optimizer.zero_grad()
+            logits = model(clean_data)
+            loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
+            loss_total+=loss.item()
+            loss.backward()
+            optimizer.step()
+        print(f'loss_total = {loss_total} in epoch {epoch}')
 
 
     print('finished gra_training !')
     Checkpointer(model,'model').save('def_trained')
     print('Successfully saved the gra_trained model !')
-
-
 
 
 
@@ -98,3 +99,17 @@ class InputGradRegLoss(object):
         loss = self.criterion(pred, target)
         regulr = self.reg(loss, x, target)
         return loss + regulr * self.weight
+
+
+class gradient_regulation_defense:
+
+    def __init__(self,cfg) -> None:
+        self.cfg = cfg
+        self.train_set = get_train_set(self.cfg)
+
+    def defense(self):
+        gradient_regulation(self.cfg,self.train_set)
+
+    def get_defense_result(self):
+        return get_result(self.cfg,self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'defense')
+  

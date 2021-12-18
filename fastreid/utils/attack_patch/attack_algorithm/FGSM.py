@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from fastreid.utils.reid_patch import log
 
-from ..utils import Attack,LabelMixin
+from .utils import Attack,LabelMixin
 from advertorch.utils import clamp
 from advertorch.utils import batch_multiply
 
