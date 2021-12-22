@@ -1,12 +1,6 @@
 
 
-import torch
-a = torch.randint(10,(4,3))
+a = 10.23514
 
-b = torch.randint(10,(1,3))
-
-c = torch.cat((a,b))
+a = round(a,2)
 print(a)
-print(b)
-print(c)
-print(c.shape)

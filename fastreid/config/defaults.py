@@ -300,7 +300,7 @@ _C.TEST.EVAL_PERIOD = 20
 # Number of images per batch in one process.
 _C.TEST.IMS_PER_BATCH = 64
 _C.TEST.METRIC = "cosine"
-_C.TEST.ROC = CN({"ENABLED": False})
+_C.TEST.ROC = CN({"ENABLED": True})  # get ROC index
 _C.TEST.FLIP = CN({"ENABLED": False})
 
 # Average query expansion

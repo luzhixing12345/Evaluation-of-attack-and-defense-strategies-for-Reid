@@ -3,12 +3,14 @@
 
 import functools as ft
 import torch.nn.functional as F
+import operator as op
 import torch
+import torch.nn as nn
 import numpy as np
 from fastreid.engine import DefaultTrainer
-from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set
+from fastreid.utils.defense_patch.defense_algorithm.goat import get_distances
+from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_result, get_train_set, pairwise_distance
 from .robrank import *
 margin_cosine: float = 0.2
 margin_euclidean: float = 1.0
@@ -35,30 +37,43 @@ def RobRank_defense(cfg,train_set,str):
     else:
         raise KeyError
 
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
     model.preprocess_image = change_preprocess_image(cfg)
-    model.heads = build_feature_heads(cfg)
-    model.to(device)
+    model.heads.mode = 'F'
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
+    optimizer = DefaultTrainer.build_optimizer(cfg,model)
+    criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
 
     max_id =4000
-    optimizer = DefaultTrainer.build_optimizer(cfg,model)
+    EPOCH = 3
     
-    model.train()
-    for id,data in enumerate(train_set):
-        if id>=max_id:
-            break
-        data['images']/=255.0
-        optimizer.zero_grad()
-        loss = train_step(model,data)
-        loss.backward()
-        optimizer.step()
+    for epoch in range(EPOCH):
+        model.train()
+        loss_total = 0
+        for id,data in enumerate(train_set):
+            if id>max_id:
+                break
+            optimizer.zero_grad()
+            data['images']/=255.0
+            labels = data['targets'].to(device)
+            adv_images = train_step(model,data,id)
+            
+            outputs = model(adv_images)
+            dist = pairwise_distance(outputs, outputs)
+            dist_ap, dist_an, list_triplet = get_distances(dist, labels)
+            y = torch.ones(dist_ap.size(0)).to(device)
+
+            loss = criterion(dist_an, dist_ap, y)
+            loss.backward()
+            optimizer.step()
+        print(f'loss_total = {loss_total} in epoch {epoch}')
     
     print(f'finished {str}_training !')
     Checkpointer(model,'model').save(f'{str}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {str}_trained model !')
 
-def est_training_step(model, batch, *, pgditer: int = 24):
+def est_training_step(model, batch, id):
     '''
     Do adversarial training using Mo's defensive triplet (2002.11293 / ECCV'20)
     Embedding-Shifted Triplet (EST)
@@ -82,14 +97,26 @@ def est_training_step(model, batch, *, pgditer: int = 24):
     # set shape
 
     # generate adv examples
-    model.eval()
     advimgs = advrank.embShift(images)
-    model.train()
-    output = model(advimgs)
-    # compute loss
-    loss = ptriplet()(output, labels)
+    if id%200==0:
+        print('ssim = ',eval_ssim(images,advimgs))
 
-    return loss
+    return advimgs
+
+def svd(output,constraints: list = [6, 7]):
+    Constraints = {
+    1: lambda svd: (svd.S.max() - 1e+3).relu(),
+    2: lambda svd: (svd.S[0] / svd.S[1] - 8.0).relu(),
+    3: lambda svd: (1.2 - svd.S[1:5] / svd.S[2:6]).relu().mean(),
+    4: lambda svd: (1e-3 / svd.S.min() - 1.0).relu(),
+    5: lambda svd: torch.exp(svd.S.max() / (8192 * svd.S.min()) - 1),
+    6: lambda svd: torch.log(svd.S.max() / 2e+2).relu(),
+    7: lambda svd: torch.log(1e-5 / svd.S.min()).relu(),
+    8: lambda svd: torch.log(svd.S.max() / (1e5 * svd.S.min())).relu()
+    }
+    svd = torch.svd(output)
+    penalties = [Constraints[i](svd) for i in constraints]
+    return ft.reduce(op.add, penalties) if penalties else 0.0
 
 def mmt_training_step(model: torch.nn.Module, batch):
     '''
@@ -117,8 +144,10 @@ def mmt_training_step(model: torch.nn.Module, batch):
                       metric='N', verbose=False)
     model.eval()
     images_pnp = pnp.minmaxtriplet(images, triplets)
+    images_pnp = images_pnp.clone().detach()
+    images_pnp.requires_grad_()
     model.train()
-    pnemb = model.forward(images_pnp)
+    pnemb = model(images_pnp)
     if loss_fun._metric in ('C', 'N'):
         pnemb = F.normalize(pnemb)
     # compute adversarial loss
@@ -177,8 +206,12 @@ def pnp_training_step(model: torch.nn.Module, batch, *,
     pnemb = F.normalize(pnemb)
     aemb = F.normalize(aemb)
     # compute adversarial loss
+    pnemb = pnemb.clone().detach()
+    pnemb.requires_grad()
+    aemb = aemb.clone().detach()
+    aemb.requires_grad()
     model.train()
-    loss = ptriplet().raw(aemb, pnemb[:len(pnemb) // 2],
+    loss = loss_fun.raw(aemb, pnemb[:len(pnemb) // 2],
                               pnemb[len(pnemb) // 2:]).mean()
 
     return loss
@@ -194,18 +227,15 @@ def ses_training_step(model, batch):
     of the ECCV20 paper. (See arxiv: 2002.11293)
     '''
     images, labels = batch['images'].to(device), batch['targets'].to(device)
-    # generate adversarial examples
+    images = images.clone().detach()
+    images.requires_grad_()
+        # generate adversarial examples
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
                       pgditer=24,
                       device = 'cuda',
                       metric='N', verbose=False)
-
-    model.wantsgrad = True
-    model.eval()
     advimgs = advrank.embShift(images)
-    model.train()
-    model.watnsgrad = False
     # evaluate advtrain loss
     output_orig = model(images)
     loss_orig = ptriplet()(output_orig, labels)

@@ -60,6 +60,7 @@ def main(args):
     def_result=None
     def_adv_result=None  
     SSIM=None
+    def_SSIM = None
     # the model positions have been already defined in fastreid\config\defaults.py 
     # _C.MODEL.WEIGHTS                = "./model/model_final.pth"       the origin model after training 
     # _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'      the model that can classify well in query set
@@ -84,10 +85,10 @@ def main(args):
         print_info('start defense')
         DefenseProcess = defense(cfg)
         DefenseProcess.start_defense()
-        def_result,def_adv_result= DefenseProcess.get_result()
+        def_result,def_adv_result,def_SSIM= DefenseProcess.get_result()
 
     if args.record:
-        record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM)
+        record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SSIM)
         print_info('the results were recorded in the excel in the root path')
     
     # if args.log: #default True

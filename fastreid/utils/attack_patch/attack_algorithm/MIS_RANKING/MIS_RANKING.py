@@ -12,10 +12,10 @@ import torch.optim as optim
 from fastreid.engine.defaults import DefaultTrainer
 from fastreid.modeling.heads.build import build_heads
 from fastreid.utils.checkpoint import Checkpointer
-from .GD import Generator, MS_Discriminator, Pat_Discriminator, GANLoss, weights_init
+from .GD import Generator, MS_Discriminator, Pat_Discriminator, GANLoss, ResnetG, weights_init
 from .advloss import DeepSupervision, adv_CrossEntropyLoss, adv_CrossEntropyLabelSmooth, adv_TripletLoss
 
-from fastreid.utils.reid_patch import change_preprocess_image, get_train_set
+from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_train_set
 
 is_training = False
 Imagenet_mean = [0.485, 0.456, 0.406]
@@ -32,7 +32,7 @@ def check_freezen(net, need_modified=False, after_modified=None):
       # else: print('child', cc , 'was forzen')
     cc += 1
 
-def make_MIS_Ranking_generator(cfg,ak_type,pretrained=False):
+def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   # actually i couldn't understand why somebody write python code with two space indented instead of four???
   train_set = get_train_set(cfg)
   clf_criterion = adv_CrossEntropyLabelSmooth(num_classes=train_set.dataset.num_classes) if ak_type<0 else nn.MultiLabelSoftMarginLoss()
@@ -41,23 +41,24 @@ def make_MIS_Ranking_generator(cfg,ak_type,pretrained=False):
 
   cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
   model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
-  model.heads = build_heads(cfg)
   model.preprocess_image=change_preprocess_image(cfg) # re-range the input size to [0,1]
   Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
   model.to(device)
 
-  check_freezen(model, need_modified=True, after_modified=True)
+  check_freezen(model, need_modified=True, after_modified=False)
 
   G = Generator(3, 3, 32, norm='bn').apply(weights_init)
+  #G = ResnetG(3,3,32).apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
+  #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
   check_freezen(D, need_modified=True, after_modified=True)
   optimizer_G = optim.Adam(G.parameters(), lr=0.0002, betas=(0.5, 0.999))
   optimizer_D = optim.Adam(D.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
-  model = nn.DataParallel(model).cuda() 
-  G = nn.DataParallel(G).cuda()
-  D = nn.DataParallel(D).cuda()
+  model.to(device)
+  G.to(device)
+  D.to(device)
   G_save_pos = f'./model/G_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
   D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
 
@@ -69,12 +70,14 @@ def make_MIS_Ranking_generator(cfg,ak_type,pretrained=False):
     
     torch.save(G.state_dict(), G_save_pos)
     torch.save(D.state_dict(), D_save_pos)
+    print("successfully save attack model weights of G and D")
     
-    MIS_Ranking_generator = generator(G,D)
+    MIS_Ranking_generator = generator(G,D,cfg)
   else:
     G.load_state_dict(torch.load(G_save_pos))
     D.load_state_dict(torch.load(D_save_pos))
-    MIS_Ranking_generator = generator(G,D)
+    print("successfully load attack model weights of G and D")
+    MIS_Ranking_generator = generator(G,D,cfg)
 
   return MIS_Ranking_generator
 
@@ -85,15 +88,20 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
   global is_training
   is_training = True
 
+  loss_G_total = 0
+  loss_D_total = 0
   print(f"start training epoch {epoch} for Mis-ranking model G and D")
   for batch_idx, data in enumerate(trainloader):
-    
+    if batch_idx>4000:
+      break
     imgs = (data['images']/255).cuda()
     pids = data['targets'].cuda()
 
+    imgs = imgs.clone().detach()
+    imgs.requires_grad_()
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
-    new_imgs = new_imgs.clone().detach()
-    new_imgs.requires_grad_()
+    if batch_idx%200==0:
+      print(f'ssim = {eval_ssim(imgs,new_imgs)}')
     mask = mask.cuda()
     # Fake Detection and Loss
     pred_fake_pool, _ = D(torch.cat((imgs, new_imgs.detach()), 1))
@@ -109,10 +117,10 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_G_GAN = criterionGAN(pred_fake, True)               
     
     # Re-ID advloss
-    model.train()
-    output = model(new_imgs)
-    features = output["features"]
-    logits = output['pred_class_logits']
+    model.heads.mode = 'F'
+    features = model(new_imgs)
+    model.heads.mode = 'C'
+    logits = model(new_imgs)
 
     new_outputs = logits
     new_features = features.view(features.size(0), -1)
@@ -126,15 +134,18 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
 
     global_loss = DeepSupervision(metric_criterion, new_features, pids, targets) if isinstance(new_features, (tuple, list)) else metric_criterion(new_features, pids, targets)
     
-    loss_G_ReID = (xent_loss+ global_loss)*2
+    loss_G_ReID = (xent_loss+ global_loss)*10
 
     from .util.ms_ssim import msssim
     loss_func = msssim
     loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
 
+
     ############## Forward ###############
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
+    loss_G_total+=loss_G.item()
+    loss_D_total+=loss_D.item()
     ############## Backward #############
     # update generator weights
     optimizer_G.zero_grad()
@@ -145,6 +156,9 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     optimizer_D.zero_grad()
     loss_D.backward()
     optimizer_D.step()
+  
+  print(f'loss_G = {loss_G_total}')
+  print(f'loss_D = {loss_D_total}')
 
 def perturb(imgs, G, D, cfg,train_or_test='test'):
   n,c,h,w = imgs.size()
@@ -171,14 +185,14 @@ def L_norm(cfg,delta, mode='train'):
   for c in range(3):
     delta.data[:,c,:,:] = (delta.data[:,c,:,:] - Imagenet_mean[c]) / Imagenet_stddev[c]
 
-  bs = cfg.TEST.IMS_PER_BATCH
+  bs = cfg.SOLVER.IMS_PER_BATCH
   for i in range(bs):
     # do per channel l_inf normalization
     for ci in range(3):
       try:
         l_inf_channel = delta[i,ci,:,:].data.abs().max()
         # l_inf_channel = torch.norm(delta[i,ci,:,:]).data
-        mag_in_scaled_c = 16/Imagenet_stddev[ci]
+        mag_in_scaled_c = 16/(255.0*Imagenet_stddev[ci])
         delta[i,ci,:,:].data *= np.minimum(1.0, mag_in_scaled_c / l_inf_channel.cpu()).float().cuda()
       except IndexError:
         break
@@ -186,10 +200,11 @@ def L_norm(cfg,delta, mode='train'):
 
 
 class generator:
-  def __init__(self,G,D) -> None:
+  def __init__(self,G,D,cfg) -> None:
       
       self.G = G
       self.D = D
+      self.cfg = cfg
       self.G.eval()
       self.D.eval()
   def __call__(self, images, y):
@@ -198,7 +213,7 @@ class generator:
         return self.GA(images)
 
     with torch.no_grad():
-      new_imgs, _,_ = perturb(images, self.G, self.D, train_or_test='test')
+      new_imgs, _,_ = perturb(images, self.G, self.D,self.cfg, train_or_test='test')
 
     return new_imgs
 
@@ -210,7 +225,7 @@ class generator:
     for i in range(N):
       img = images[:,i,:,:,:]
       with torch.no_grad():
-        new_imgs, _,_ = perturb(img, self.G, self.D, train_or_test='test')
+        new_imgs, _,_ = perturb(img, self.G, self.D,self.cfg, train_or_test='test')
       new_images.append(new_imgs)
     
     new_images = torch.stack(new_images)

@@ -37,6 +37,9 @@ class TrainingHead(nn.Module):
         elif pool_type == "flatten":     self.pool_layer = Flatten()
         else:                            raise KeyError(f"{pool_type} is not supported!")
         # fmt: on
+        self.mode = 'F'
+        # C means return logits to by classifier layer
+        # F means return features to backbone
 
         self.neck_feat = neck_feat
 
@@ -72,8 +75,8 @@ class TrainingHead(nn.Module):
 
         # Evaluation
         # fmt: off
-        # if not self.training:
-        #     return bn_feat
+        if self.mode == 'F':
+            return bn_feat
         # fmt: on
 
         # Training
@@ -91,4 +94,5 @@ class TrainingHead(nn.Module):
         else:                           raise KeyError(f"{self.neck_feat} is invalid for MODEL.HEADS.NECK_FEAT")
         # fmt: on
 
+        
         return pred_class_logits

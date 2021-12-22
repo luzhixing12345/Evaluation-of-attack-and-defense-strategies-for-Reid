@@ -14,10 +14,8 @@ from .heads import (
     REID_HEADS_REGISTRY,
     build_heads,
     build_train_heads,
-    build_feature_heads,
     EmbeddingHead,
     TrainingHead,
-    FeatureHead
 )
 from .meta_arch import (
     build_model,

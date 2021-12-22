@@ -1,14 +1,14 @@
 
+
 import torch
 from fastreid.engine import DefaultTrainer
-from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.checkpoint import Checkpointer
 from collections import defaultdict
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.advertorch.attacks import PGDAttack
-from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set, pairwise_distance
+from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_result, get_train_set, pairwise_distance
 import numpy as np
 
 device='cuda'
@@ -16,23 +16,24 @@ device='cuda'
 #Rank 防御方法
 def GOAT(cfg,train_data_loader):
 
+    cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)
     model.preprocess_image = change_preprocess_image(cfg)
-    model.heads = build_feature_heads(cfg)
+    model.heads.mode = 'F'
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
     model.to(device)
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
-    max_epoch = 1000
+    max_epoch = 500
     request_dict = defaultdict(list)
-    loss_fun = nn.MarginRankingLoss(margin=10, reduction='mean')
-    EPOCH = 3
+    criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
+    EPOCH = 5
 
     for id,data in enumerate(train_data_loader):
         if id>max_epoch:
             break
         targets =data['targets'].cpu()
-        image = (data['images']/255.0).cpu()
+        image = (data['images']/255).cpu()
         for id,img in zip(targets,image):
             request_dict[id.item()].append(img)
   
@@ -41,30 +42,32 @@ def GOAT(cfg,train_data_loader):
         for index, data in enumerate(train_data_loader):
             if index>max_epoch:
                 break
-            inputs_clean = (data['images']/255.0).to(device)
+            inputs_clean = (data['images']/255).to(device)
             labels = data['targets'].to(device)       
                 
-            inputs = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
+            adv_images = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
+            if index%20==0:
+                print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
             model.train()
             # zero the parameter gradients
             optimizer.zero_grad()
-
-            outputs = model(inputs)
+            outputs = model(adv_images)
             dist = pairwise_distance(outputs, outputs)
             dist_ap, dist_an, list_triplet = get_distances(dist, labels)
             y = torch.ones(dist_ap.size(0)).to(device)
-            loss = loss_fun(dist_an, dist_ap, y)
-            
+            loss = criterion(dist_an, dist_ap, y)
+
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
-        print('total_loss = ',loss_total,epoch)
-    
+        print(f'total_loss = {loss_total} in epoch {epoch}')
     print('finished GOAT_training !')
     Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE} model !')
  
+
+
 def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r=4):
     """Create an adversarial batch from a given batch for adversarial training with GOAT
 
@@ -87,6 +90,7 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
     Returns:
         Tensor: batch of adversarial images
     """
+    model.eval()
     if request_dict: # GOAT : INTER BATCH
         requests = []
         if nb_r > 1:
@@ -101,7 +105,6 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
                     R = model(R)
                 requests.append(R)
             requests = torch.stack(requests)
-            print('requests.shape = ',requests.shape)
             criterion = sum_mse
         else:
             for label in labels:
@@ -133,14 +136,12 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
                         max_ind_p = i
                 pulling.append(features[max_ind_p])
             pulling = torch.stack(pulling)
-            print('pulling.shape = ',pulling.shape)
             # add pulling feature at the end of pushing guides -> single pulling guide
             requests = torch.cat((requests,pulling.unsqueeze(0)))
             criterion = sum_dif_mse
         requests = requests.to(device)
 
-
-    attack = PGDAttack(lambda x: model(x), criterion, eps=0.05, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
+    attack = PGDAttack(lambda x: model(x), criterion, eps=0.05, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True,clip_max=255.0)
     data_adv = attack.perturb(inputs, requests)
     return data_adv
 

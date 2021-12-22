@@ -2,7 +2,7 @@
 import time
 import os
 import shutil
-
+import skimage
 import openpyxl
 import torch
 import torch.nn as nn
@@ -24,11 +24,10 @@ excel_name = 'result.xlsx'
 Attack_algorithm_library=['FGSM','IFGSM','MIFGSM','ODFA','MISR','FNA','MUAP','SSAE']
 Defense_algorithm_library=['ADV','GOAT','EST','SES','PNP']
 
-evaluation_indicator=['Rank-1','Rank-5','Rank-10','mAP','mINP','metric']
-evaluation_attackIndex=['mAP','SDSIM','index']
+evaluation_indicator=['Rank-1','mAP',"TPR@FPR={:.0e}".format(1e-2)]
+evaluation_attackIndex= ['DmAP','SDSIM','AttackIndex']
+evaluation_defenseIndex =['def-SDSIM','DefenseIndex']
 attack_R_type = ['QA+','QA-','GA+','GA-']
-
-num=len(evaluation_indicator)
 
 def get_query_set(cfg,relabel=True):
     query_set=build_reid_query_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
@@ -57,7 +56,6 @@ def eval_train(model,data_loader,max_id=-1):
     correct = 0 
     softmax = nn.Softmax(dim=1)
     n=0
-
     for id,data in enumerate(data_loader):
         if max_id!=-1 and id>max_id:
             break
@@ -67,9 +65,17 @@ def eval_train(model,data_loader,max_id=-1):
         targets = data['targets'].to(device)
         correct += pred.eq(targets.view_as(pred)).sum().item()
         n+=targets.shape[0]
-
-    
     return 100. * correct / n
+
+def eval_ssim(images1,images2):
+    size = images1.shape[0]
+    SSIM = 0
+    for i in range(size):
+        image1 = CHW_to_HWC(images1[i])
+        image2 = CHW_to_HWC(images2[i])
+        SSIM += skimage.measure.compare_ssim(image1,image2,multichannel=True)
+    SSIM/=size
+    return SSIM
 
 def save_image(imgs,paths,str):
       
@@ -167,87 +173,111 @@ def remove_Sheet(wb,sheet_list):
         wb.remove(wb['Sheet1'])
 
 def sheet_init(sheet):
-    for row in range (3,4+len(Attack_algorithm_library)*num):
-        for col in range (2,6+len(Defense_algorithm_library)*2):
+    for row in range (3,4+len(Attack_algorithm_library)*len(evaluation_indicator)*len(attack_R_type)):
+        for col in range (2,7+len(Defense_algorithm_library)*2):
             sheet.column_dimensions[get_column_letter(col)].width = 20
             sheet.row_dimensions[row].height = 40
-    sheet['D3']='PURE VALUE'
-    sheet['E3']='AFTER ATTACK'
+    sheet['E3']='PURE VALUE'
+    sheet['F3']='AFTER ATTACK'
     for row,name in enumerate(Attack_algorithm_library):
-        sheet['B'+str(4+num*row)]=name
-        for i in range(4,4+num):
-            sheet['C'+str(i+num*row)]=evaluation_indicator[i-4]
+        row = len(evaluation_indicator)*len(attack_R_type)*row
+        sheet['B'+str(4+row)]=name
+        for bias,type in enumerate(attack_R_type):
+            bias = len(evaluation_indicator)*bias
+            sheet['C'+str(4+row+bias)]=type
+            for i,indicator in enumerate(evaluation_indicator):
+                sheet['D'+str(4+row+bias+i)]=indicator
+            
 
     for col,name in enumerate(Defense_algorithm_library):
-        sheet[get_column_letter(6+2*col)+str(3)]=name
-        sheet[get_column_letter(7+2*col)+str(3)]='ATFER ATTACK'
+        sheet[get_column_letter(7+2*col)+str(3)]=name
+        sheet[get_column_letter(8+2*col)+str(3)]='ATFER ATTACK'
 
-def sheet_AI_init(sheet_AI):
+def sheet_index_init(sheet_index):
     for row in range (3,4+4*len(Attack_algorithm_library)):
-        for col in range (2,7):
-            sheet_AI.column_dimensions[get_column_letter(col)].width = 20
-            sheet_AI.row_dimensions[row].height = 40
+        for col in range (2,6+2*len(Defense_algorithm_library)):
+            sheet_index.column_dimensions[get_column_letter(col)].width = 20
+            sheet_index.row_dimensions[row].height = 40
 
     bias = 4
     for row,name in enumerate(Attack_algorithm_library):
         for i in range(4):
-            sheet_AI['B'+str(bias+i+4*row)]=name
+            sheet_index['B'+str(bias+i+4*row)]=name
         for i,type in enumerate(attack_R_type):
-            sheet_AI['C'+str(bias+4*row+i)] =type
+            sheet_index['C'+str(bias+4*row+i)] =type
     
     for i in range(len(evaluation_attackIndex)):
-        sheet_AI[get_column_letter(i+4)+'3'] = evaluation_attackIndex[i]
+        sheet_index[get_column_letter(i+4)+'3'] = evaluation_attackIndex[i]
+
+    for i in range(len(Defense_algorithm_library)):
+        line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*i
+        for j in range(len(evaluation_defenseIndex)-1):
+            sheet_index[get_column_letter(j+line)+'3'] = evaluation_defenseIndex[j]
+        sheet_index[get_column_letter(len(evaluation_defenseIndex)-1+line)+'3'] = Defense_algorithm_library[i]
+        
 
 def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
 
-    row_start = 4 + num*Attack_algorithm_library.index(cfg.ATTACKMETHOD)
-    column1 = chr(ord('F') + Defense_algorithm_library.index(cfg.DEFENSEMETHOD)*2)
+    row = 4 + len(evaluation_indicator)*len(attack_R_type)*Attack_algorithm_library.index(cfg.ATTACKMETHOD)
+    row += len(evaluation_indicator)*attack_R_type.index(cfg.ATTACKTYPE+cfg.ATTACKDIRECTION)
+    column1 = chr(ord('G') + Defense_algorithm_library.index(cfg.DEFENSEMETHOD)*2)
     column2 = chr(ord(column1)+1)
 
-    for col,dict_name in {'D':pure_result,'E':att_result,column1:def_result,column2:def_adv_result}.items():
-        for i in range(num):
-            sheet[col+str(row_start+i)]  =dict_name[evaluation_indicator[i]]
+    for col,dict_name in {'E':pure_result,'F':att_result,column1:def_result,column2:def_adv_result}.items():
+        for i in range(len(evaluation_indicator)):
+            sheet[col+str(row+i)] = round(dict_name[evaluation_indicator[i]],2)
 
-def save_attack_index(cfg,pure_result,att_result,SSIM,sheet):
+def CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet):
 
     row_start = 4 + 4*Attack_algorithm_library.index(cfg.ATTACKMETHOD)
     bias = attack_R_type.index(cfg.ATTACKTYPE+cfg.ATTACKDIRECTION)
     row = row_start+bias
     
-    column = 4
+    AttackIndex = {}
+    DefenseIndex = {}
+    # AttackIndex calculate
+    AttackIndex['DmAP'] = pure_result['mAP']-att_result['mAP']
+    AttackIndex['SDSIM'] = 1-SSIM
+    AttackIndex['AttackIndex'] = AttackIndex['DmAP']/AttackIndex['SDSIM']
     
-    ans = {}
-    ans['mAP'] = pure_result['mAP']-att_result['mAP']
-    ans['SDSIM'] = 1-SSIM
-    ans['index'] = ans['mAP']/ans['SDSIM']
+    # DefenseIndex calculate
+    DefenseIndex['def-SDSIM'] = 1-def_SSIM
+    Delta_mAP_keep = pure_result['mAP']-def_result['mAP']
+    Delta_mAP_improve = def_adv_result['mAP']-att_result['mAP']
+    Delta_SSIM = def_SSIM - SSIM
+    DefenseIndex['DefenseIndex'] = Delta_mAP_improve*Delta_SSIM/Delta_mAP_keep
 
     for i,indicator in enumerate(evaluation_attackIndex):
-        sheet[get_column_letter(column+i)+str(row)] =ans[indicator]
+        sheet[get_column_letter(4+i)+str(row)] = round(AttackIndex[indicator],2)
+    
+    line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*Defense_algorithm_library.index(cfg.DEFENSEMETHOD)
+    for i in range(len(evaluation_defenseIndex)-1):
+        sheet[get_column_letter(line+i)+str(row)] = DefenseIndex[evaluation_defenseIndex[i]]
+    sheet[get_column_letter(line+len(evaluation_defenseIndex)-1)+str(row)] = round(DefenseIndex['DefenseIndex'],2)
 
 
-def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,save_pos= excel_name):
+def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,save_pos= excel_name):
     if check(save_pos):
         wb = openpyxl.load_workbook(save_pos)
     else :
         wb = openpyxl.Workbook()
     sheet_list = wb.sheetnames
-    sheet_name = cfg.DATASETS.NAMES[0]
+    sheet_name = f'{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}'
     if sheet_name in sheet_list:
         sheet = wb[sheet_name]
     else :
         sheet = wb.create_sheet(title = sheet_name)
     
-    sheet_attackIndex_name=f'AttackIndex_{cfg.DATASETS.NAMES[0]}'
+    sheet_attackIndex_name=f'Index_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}'
     if sheet_attackIndex_name in sheet_list:
-        sheet_AI = wb[sheet_attackIndex_name]
+        sheet_index = wb[sheet_attackIndex_name]
     else :
-        sheet_AI = wb.create_sheet(title = sheet_attackIndex_name)
+        sheet_index = wb.create_sheet(title = sheet_attackIndex_name)
     sheet_init(sheet)
-    sheet_AI_init(sheet_AI)
-    if def_result!=None and def_adv_result != None:
+    sheet_index_init(sheet_index)
+    if def_result != None and def_adv_result != None and pure_result!=None and att_result!=None:
         save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
-    if pure_result!=None and att_result!=None and SSIM !=None:
-        save_attack_index(cfg,pure_result,att_result,SSIM,sheet_AI)
+        CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet_index)
     #save_config(cfg,pure_result,adv_result,def_adv_result,sheet)
     remove_Sheet(wb,sheet_list)
     wb.save(save_pos)

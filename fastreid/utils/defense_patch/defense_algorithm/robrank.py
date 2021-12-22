@@ -4,27 +4,9 @@ import torch.nn.functional as F
 import numpy as np
 import functools
 import os
-from fastreid.utils.reid_patch import get_test_set, save_image,change_preprocess_image
 import statistics
 from scipy import stats
-from fastreid.engine import DefaultTrainer
-from fastreid.modeling.heads.build import build_feature_heads
-from fastreid.utils.checkpoint import Checkpointer
 device='cuda'
-_LEGAL_ATTAKS_ = ('ES', 'QA', 'CA', 'SPQA', 'GTM', 'GTT', 'TMA', 'LTM')
-
-def ROBRANK(cfg,query_data_loader,gallery_data_loader):
-    '''
-    l means the length of query set, we need to split the test set as query set and gallery set
-    '''
-    model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.preprocess_image = change_preprocess_image(cfg) 
-    model.heads = build_feature_heads(cfg)
-    model.to(device)
-    Checkpointer(model).load(cfg.MODEL.WEIGHTS)
-    rob = robrank(cfg,query_data_loader,gallery_data_loader,model)
-    rob.run()
-
 class robrank():
     def __init__(self,cfg,query_data_loader,gallery_data_loader,model) -> None:
         self.model=model

@@ -5,7 +5,7 @@ from torch.nn import Parameter
 from copy import deepcopy
 import torch.optim as optim
 
-from fastreid.utils.reid_patch import get_train_set, save_attack_index
+from fastreid.utils.reid_patch import get_train_set
 device = 'cuda'
 def l2normalize(v, eps=1e-12):
     return v / (v.norm() + eps)

@@ -1,9 +1,9 @@
 
 
-
 from .defense_algorithm import *
 from ..attack_patch.attack_process import attack
-
+from tabulate import tabulate
+from termcolor import colored
 # G_Defense_algorithm_library=['ADV','GRA','DIST']
 # R_Defense_algorithm_library=['GOAT','EST','SES','PNP']
 # Defense_algorithm_library=G_Defense_algorithm_library+R_Defense_algorithm_library
@@ -42,11 +42,36 @@ class defense:
 
     def get_result(self):
         def_result =  self.DefenseProcess.get_defense_result()
+        self.print_csv_format(def_result)
         def_att_result = None
+        def_SSIM = None
         
         if self.UseAttack:
-            def_att_result = self.AttackProcess.get_result()
-        print(def_result)
-        print(def_att_result)
-        return def_result,def_att_result
+            def_att_result,def_SSIM= self.AttackProcess.get_result()
+            self.print_csv_format(def_att_result)
+        
+            print('def-SSIM = ',def_SSIM)
+        return def_result,def_att_result,def_SSIM
+
+    def print_csv_format(self,results):
+        """
+        Print main metrics in a format similar to Detectron2,
+        so that they are easy to copypaste into a spreadsheet.
+        Args:
+            results (OrderedDict): {metric -> score}
+        """
+        # unordered results cannot be properly printed
+        dataset_name = self.cfg.DATASETS.NAMES[0]
+        metrics = ["Dataset"] + [k for k in results]
+        csv_results = [(dataset_name, *list(results.values()))]
+
+        # tabulate it
+        table = tabulate(
+            csv_results,
+            tablefmt="pipe",
+            floatfmt=".2f",
+            headers=metrics,
+            numalign="left",
+        )
+        print(colored(table, "cyan"))
         

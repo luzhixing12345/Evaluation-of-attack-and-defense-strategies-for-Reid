@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from fastreid.engine import DefaultTrainer
-from fastreid.modeling.heads.build import build_feature_heads
 from fastreid.utils.attack_patch.attack_algorithm import *
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.reid_patch import CHW_to_HWC, change_preprocess_image, get_query_set, get_result, save_image
@@ -29,7 +28,7 @@ class QueryAttack:
         
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
         self.model.preprocess_image = change_preprocess_image(self.cfg) 
-        self.model.heads = build_feature_heads(self.cfg)
+        self.model.heads.mode = 'F'
         self.model.to(device)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
 
@@ -70,24 +69,13 @@ class QueryAttack:
             self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
         elif self.cfg.ATTACKMETHOD =='MISR':
             self.MISR_generator = make_MIS_Ranking_generator(self.cfg,ak_type=-1,pretrained=self.pretrained)
-        elif self.cfg.ATTACKMETHOD == 'FNA':
-            self.FNA_generator =FNA(self.cfg,
-                                    self.model,
-                                    self.indices,
-                                    self.query_pids,
-                                    self.query_camids,
-                                    self.gallery_pids,
-                                    self.gallery_camids,
-                                    self.gallery_features)
         
-    def attack_images(self,images,selected_features,target,q_idx):
+    def attack_images(self,images,selected_features,target):
 
         attack_method = self.get_attack_method()
 
         if self.cfg.ATTACKMETHOD=='MUAP':
             adv_images = attack_method(images,target)
-        elif self.cfg.ATTACKMETHOD=='FNA':
-            adv_images = attack_method(images,selected_features,q_idx)
         else :
             adv_images = attack_method(images,selected_features)
 
@@ -109,13 +97,19 @@ class QueryAttack:
             if direction=='+':
                 # select bottom 10 images, and generally assume them to be ground false
                 sample_id = self.indices[q_idx][keep][-10:]
-
                 selected_features.append(self.gallery_features[sample_id])
+
+                if self.cfg.ATTACKMETHOD=='FNA':
+                    top = self.indices[q_idx][keep][0]
+                    selected_features.append(self.gallery_features[top])
             else :
                 # select top 10 images, and generally assume them to be ground truth 
                 sample_id = self.indices[q_idx][keep][:10]
-
                 selected_features.append(self.gallery_features[sample_id])
+
+                if self.cfg.ATTACKMETHOD=='FNA':
+                    bottom = self.indices[q_idx][keep][-1]
+                    selected_features.append(self.gallery_features[bottom])
 
         selected_features = torch.stack(selected_features)
         return selected_features
@@ -147,7 +141,7 @@ class QueryAttack:
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
             'MUAP'    :MUAP(self.cfg,self.model),
-            'FNA'     :self.FNA_generator,
+            'FNA'     :FNA(self.cfg,self.model,self.target),
         }
         return dict[self.cfg.ATTACKMETHOD]
 
@@ -175,7 +169,7 @@ class QueryAttack:
 
             selected_features = self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)
             
-            adv_images = self.attack_images(images,selected_features,target,q_idx)
+            adv_images = self.attack_images(images,selected_features,target)
             self.evaluate(images,adv_images)
             
             save_image(adv_images,path,'adv_query')

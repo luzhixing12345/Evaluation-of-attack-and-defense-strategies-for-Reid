@@ -74,6 +74,7 @@ class Baseline_train(nn.Module):
     
     '''
 
+
     def forward(self, batched_inputs):
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images)
