@@ -53,6 +53,7 @@ def get_train_set(cfg):
 def eval_train(model,data_loader,max_id=-1):
     print('*****************evluation*****************')
     model.eval()
+    model.heads.mode = 'C'
     correct = 0 
     softmax = nn.Softmax(dim=1)
     n=0
@@ -65,6 +66,7 @@ def eval_train(model,data_loader,max_id=-1):
         targets = data['targets'].to(device)
         correct += pred.eq(targets.view_as(pred)).sum().item()
         n+=targets.shape[0]
+    print('*****************end-evluation*****************')
     return 100. * correct / n
 
 def eval_ssim(images1,images2):

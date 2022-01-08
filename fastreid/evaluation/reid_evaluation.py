@@ -89,8 +89,7 @@ class ReidEvaluator(DatasetEvaluator):
             query_features, gallery_features = aqe(query_features, gallery_features, qe_time, qe_k, alpha)
 
         dist = build_dist(query_features, gallery_features, self.cfg.TEST.METRIC)
-        print("dist = ",dist.shape)
-
+        
         if self.cfg.TEST.RERANK.ENABLED:
             logger.info("Test with rerank setting")
             k1 = self.cfg.TEST.RERANK.K1

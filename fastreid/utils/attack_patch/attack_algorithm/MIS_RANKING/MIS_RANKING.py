@@ -1,7 +1,8 @@
 
 import numpy as np
 import os.path as osp
-from random import sample 
+from random import sample
+from numpy.lib.function_base import average 
 from scipy import io
 
 
@@ -59,19 +60,25 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   model.to(device)
   G.to(device)
   D.to(device)
-  G_save_pos = f'./model/G_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
-  D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
+  G_save_pos = f'./model/G_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
+  D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
 
   
   EPOCH = 10
+  SSIM = 0
   if not pretrained:
     for epoch in range(EPOCH):
-      train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
-    
-    torch.save(G.state_dict(), G_save_pos)
-    torch.save(D.state_dict(), D_save_pos)
-    print("successfully save attack model weights of G and D")
-    
+      ssim = train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
+      print(f'average ssim in epoch {epoch} is {ssim}')
+      if ssim > SSIM:
+        SSIM = ssim
+        torch.save(G.state_dict(), G_save_pos)
+        torch.save(D.state_dict(), D_save_pos)
+        print("successfully save attack model weights of G and D")
+
+    print('end of training G and D')
+    G.load_state_dict(torch.load(G_save_pos))
+    D.load_state_dict(torch.load(D_save_pos))
     MIS_Ranking_generator = generator(G,D,cfg)
   else:
     G.load_state_dict(torch.load(G_save_pos))
@@ -85,11 +92,10 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, trainloader,ak_type):
   G.train()
   D.train()
-  global is_training
-  is_training = True
 
   loss_G_total = 0
   loss_D_total = 0
+  SSIM = []
   print(f"start training epoch {epoch} for Mis-ranking model G and D")
   for batch_idx, data in enumerate(trainloader):
     if batch_idx>4000:
@@ -97,11 +103,13 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     imgs = (data['images']/255).cuda()
     pids = data['targets'].cuda()
 
-    imgs = imgs.clone().detach()
-    imgs.requires_grad_()
+    # imgs = imgs.clone().detach()
+    # imgs.requires_grad_()
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
-    if batch_idx%200==0:
-      print(f'ssim = {eval_ssim(imgs,new_imgs)}')
+    if batch_idx % 800==0:
+      ssim = eval_ssim(imgs,new_imgs)
+      print(f'ssim = {ssim}')
+      SSIM.append(ssim)
     mask = mask.cuda()
     # Fake Detection and Loss
     pred_fake_pool, _ = D(torch.cat((imgs, new_imgs.detach()), 1))
@@ -117,12 +125,11 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_G_GAN = criterionGAN(pred_fake, True)               
     
     # Re-ID advloss
-    model.heads.mode = 'F'
-    features = model(new_imgs)
-    model.heads.mode = 'C'
-    logits = model(new_imgs)
+    model.heads.mode = 'FC'
+    output = model(new_imgs)
 
-    new_outputs = logits
+    new_outputs = output['cls_outputs']
+    features = output['features']
     new_features = features.view(features.size(0), -1)
 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0
@@ -144,21 +151,25 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     ############## Forward ###############
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
+
     loss_G_total+=loss_G.item()
     loss_D_total+=loss_D.item()
     ############## Backward #############
     # update generator weights
     optimizer_G.zero_grad()
-    # loss_G.backward(retain_graph=True)
+    #loss_G.backward(retain_graph=True)
     loss_G.backward()
     optimizer_G.step()
     # update discriminator weights
     optimizer_D.zero_grad()
     loss_D.backward()
     optimizer_D.step()
+
   
   print(f'loss_G = {loss_G_total}')
   print(f'loss_D = {loss_D_total}')
+  return average(SSIM)
+
 
 def perturb(imgs, G, D, cfg,train_or_test='test'):
   n,c,h,w = imgs.size()

@@ -94,5 +94,11 @@ class TrainingHead(nn.Module):
         else:                           raise KeyError(f"{self.neck_feat} is invalid for MODEL.HEADS.NECK_FEAT")
         # fmt: on
 
-        
-        return pred_class_logits
+        if self.mode == 'C':
+            return cls_outputs
+        elif self.mode == 'FC':
+            return {
+                "cls_outputs": cls_outputs,
+                "pred_class_logits": pred_class_logits,
+                "features": feat
+            }

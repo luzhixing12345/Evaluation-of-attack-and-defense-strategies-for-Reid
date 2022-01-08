@@ -6,54 +6,7 @@ from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_result, get_train_set
 from fastreid.utils.attack_patch.attack_algorithm import *
 device='cuda'
-
-def adversary_train(cfg,train_set,model,attack_method):
-    
-    optimizer = DefaultTrainer.build_optimizer(cfg, model)
-    loss_fun = nn.CrossEntropyLoss()
-
-    EPOCH = 3
-    max_id = 4000
-    alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data 
-
-    model.train()
-    for epoch in range(EPOCH):
-        loss_total = 0
-        for id,data in enumerate(train_set):
-            if id>max_id:
-                break
-            target = data['targets'].to(device)
-            images = (data['images']/255.0).to(device)
-            with torch.no_grad():
-                model.heads.mode = 'F'
-                features = model(images)
-            
-            if cfg.ATTACKMETHOD == 'MUAP':
-                adv_images = attack_method(images,target)
-            else:
-                adv_images = attack_method(images,features)
-
-            if id%200==0:
-                print('ssim = ',eval_ssim(images,adv_images))
-
-            optimizer.zero_grad()
-            
-            model.heads.mode = 'C'
-            logits_clean = model(images)
-            logits_att = model(adv_images)
-
-            loss = loss_fun(logits_clean,target)*alpha+loss_fun(logits_att,target)*(1-alpha)
-            loss.backward()
-            optimizer.step()
-        print('total_loss = ',loss_total,epoch)
-
-        
-    print('finished adv_training !')
-    print('--------------------------------')
-    Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
-    print('Successfully saved the adv_trained model !')
-
-
+ 
 
 class adversary_defense:
     '''
@@ -71,6 +24,7 @@ class adversary_defense:
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
         self.model.preprocess_image = change_preprocess_image(self.cfg)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
+        self.model.to(device)
 
         self.SSAE_generator = None
         self.MISR_generator = None
@@ -85,22 +39,64 @@ class adversary_defense:
 
     def defense(self):
         attack_method = self.getAttackMethod()
-        adversary_train(self.cfg,self.train_set,self.model,attack_method)
+
+        optimizer = DefaultTrainer.build_optimizer(self.cfg, self.model)
+        loss_fun = nn.CrossEntropyLoss()
+
+        EPOCH = 3
+        max_id = 4000
+        alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data 
+
+        self.model.train()
+        self.model.heads.mode = 'C'
+        for epoch in range(EPOCH):
+            loss_total = 0
+            for id,data in enumerate(self.train_set):
+                if id>max_id:
+                    break
+                target = data['targets'].to(device)
+                images = (data['images']/255.0).to(device)
+
+                if self.cfg.ATTACKMETHOD == 'MUAP':
+                    adv_images = attack_method(images,target)
+                else:
+                    adv_images = attack_method(images,target)
+
+                # if id%200==0:
+                #     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
+                optimizer.zero_grad()
+
+                logits_clean = self.model(images)
+                logits_att = self.model(adv_images)
+
+                loss = loss_fun(logits_clean,target)*alpha+loss_fun(logits_att,target)*(1-alpha)
+                loss_total+=loss.item()
+                loss.backward()
+                optimizer.step()
+            print('total_loss = ',loss_total,epoch)
+
+            
+        print('finished adv_training !')
+        print('--------------------------------')
+        Checkpointer(self.model,'model').save(f'{self.cfg.DEFENSEMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}')
+        print('Successfully saved the adv_trained model !')
+
 
     def getAttackMethod(self):
-        mse = nn.MSELoss(reduction='sum')
+        #mse = nn.MSELoss(reduction='sum')
+        loss_fn = nn.CrossEntropyLoss(reduction="sum")
         def odfa(f1,f2):
-            return mse(f1,-f2)
+            return loss_fn(f1,-f2)
 
         eps=0.05
         eps_iter=1.0/255.0
         self.target = False
-        self.model.heads.mode = 'F'
+        self.model.heads.mode = 'C'
 
         dict = {
-            'FGSM'    :FGSM  (self.cfg,self.model, mse, eps=eps, targeted=self.target),
-            'IFGSM'   :IFGSM (self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.cfg,self.model, mse, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'FGSM'    :FGSM  (self.cfg,self.model, loss_fn, eps=eps, targeted=self.target),
+            'IFGSM'   :IFGSM (self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
             'ODFA'    :ODFA  (self.cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
