@@ -78,7 +78,7 @@ class adversary_defense:
             
         print('finished adv_training !')
         print('--------------------------------')
-        Checkpointer(self.model,'model').save(f'{self.cfg.DEFENSEMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}')
+        Checkpointer(self.model,'model').save(f'{self.cfg.DEFENSEMETHOD}_{self.cfg.ATTACKMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}')
         print('Successfully saved the adv_trained model !')
 
 

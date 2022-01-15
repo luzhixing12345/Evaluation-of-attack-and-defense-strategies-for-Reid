@@ -48,8 +48,8 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   check_freezen(model, need_modified=True, after_modified=False)
 
-  G = Generator(3, 3, 32, norm='bn').apply(weights_init)
-  #G = ResnetG(3,3,32).apply(weights_init)
+  #G = Generator(3, 3, 32, norm='bn').apply(weights_init)
+  G = ResnetG(3,3,32).apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
   #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
@@ -67,6 +67,8 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   EPOCH = 10
   SSIM = 0
   if not pretrained:
+    G.load_state_dict(torch.load(G_save_pos))
+    D.load_state_dict(torch.load(D_save_pos))
     for epoch in range(EPOCH):
       ssim = train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
       print(f'average ssim in epoch {epoch} is {ssim}')
@@ -101,15 +103,16 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     if batch_idx>4000:
       break
     imgs = (data['images']/255).cuda()
+    #imgs = data['images'].cuda()
     pids = data['targets'].cuda()
-
-    # imgs = imgs.clone().detach()
-    # imgs.requires_grad_()
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
-    if batch_idx % 800==0:
+
+    if batch_idx % 800 == 0:
       ssim = eval_ssim(imgs,new_imgs)
       print(f'ssim = {ssim}')
       SSIM.append(ssim)
+
+    new_imgs = new_imgs.cuda()
     mask = mask.cuda()
     # Fake Detection and Loss
     pred_fake_pool, _ = D(torch.cat((imgs, new_imgs.detach()), 1))
@@ -129,8 +132,11 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     output = model(new_imgs)
 
     new_outputs = output['cls_outputs']
-    features = output['features']
-    new_features = features.view(features.size(0), -1)
+    new_features = output['features']
+    # model.heads.mode = 'C'
+    # new_outputs = model(new_imgs)
+    # model.heads.mode = 'F'
+    # features = model(new_imgs)
 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0
     targets = None
@@ -147,17 +153,13 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_func = msssim
     loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
 
-
     ############## Forward ###############
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
-
-    loss_G_total+=loss_G.item()
-    loss_D_total+=loss_D.item()
     ############## Backward #############
     # update generator weights
     optimizer_G.zero_grad()
-    #loss_G.backward(retain_graph=True)
+    # loss_G.backward(retain_graph=True)
     loss_G.backward()
     optimizer_G.step()
     # update discriminator weights
@@ -165,9 +167,13 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_D.backward()
     optimizer_D.step()
 
+
+  #   loss_G_total+=loss_G.item()
+  #   loss_D_total+=loss_D.item()
+
   
-  print(f'loss_G = {loss_G_total}')
-  print(f'loss_D = {loss_D_total}')
+  # print(f'loss_G = {loss_G_total}')
+  # print(f'loss_D = {loss_D_total}')
   return average(SSIM)
 
 
@@ -190,13 +196,13 @@ def perturb(imgs, G, D, cfg,train_or_test='test'):
 
 def L_norm(cfg,delta, mode='train'):
 
-  delta.data += 1 
+  # delta.data += 1 
   delta.data *= 0.5
 
   for c in range(3):
     delta.data[:,c,:,:] = (delta.data[:,c,:,:] - Imagenet_mean[c]) / Imagenet_stddev[c]
 
-  bs = cfg.SOLVER.IMS_PER_BATCH
+  bs = cfg.SOLVER.IMS_PER_BATCH if mode == 'train' else cfg.TEST.IMS_PER_BATCH
   for i in range(bs):
     # do per channel l_inf normalization
     for ci in range(3):
@@ -219,13 +225,15 @@ class generator:
       self.G.eval()
       self.D.eval()
   def __call__(self, images, y):
+    #images = images*255.0
     # y is not used in SSAE, Just for universal adaptation
     if len(images.shape)==5:
         return self.GA(images)
 
-    with torch.no_grad():
-      new_imgs, _,_ = perturb(images, self.G, self.D,self.cfg, train_or_test='test')
 
+    new_imgs, _,_ = perturb(images, self.G, self.D,self.cfg, train_or_test='test')
+
+    #new_imgs = new_imgs/255.0
     return new_imgs
 
   def GA(self,images):
@@ -237,6 +245,8 @@ class generator:
       img = images[:,i,:,:,:]
       with torch.no_grad():
         new_imgs, _,_ = perturb(img, self.G, self.D,self.cfg, train_or_test='test')
+      new_imgs = new_imgs/255.0
+      new_imgs = torch.clamp(new_imgs, min=0., max=1.)
       new_images.append(new_imgs)
     
     new_images = torch.stack(new_images)

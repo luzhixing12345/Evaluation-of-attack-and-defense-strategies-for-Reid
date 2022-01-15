@@ -1,4 +1,5 @@
 
+
 import time
 import os
 import shutil
@@ -51,7 +52,7 @@ def get_train_set(cfg):
 
 @torch.no_grad()
 def eval_train(model,data_loader,max_id=-1):
-    print('*****************evluation*****************')
+    print('*****************evluation*****************\n')
     model.eval()
     model.heads.mode = 'C'
     correct = 0 
@@ -60,12 +61,14 @@ def eval_train(model,data_loader,max_id=-1):
     for id,data in enumerate(data_loader):
         if max_id!=-1 and id>max_id:
             break
-        logits = model(data)
+        images = (data['images']/255).to(device)
+        logits = model(images)
         probabilities = softmax(logits)
         pred = probabilities.argmax(dim=1,keepdim=True)
         targets = data['targets'].to(device)
         correct += pred.eq(targets.view_as(pred)).sum().item()
         n+=targets.shape[0]
+    print(f'accurency : {correct}/{n} = {100. * correct / n}%\n')
     print('*****************end-evluation*****************')
     return 100. * correct / n
 
@@ -197,7 +200,7 @@ def sheet_init(sheet):
 
 def sheet_index_init(sheet_index):
     for row in range (3,4+4*len(Attack_algorithm_library)):
-        for col in range (2,6+2*len(Defense_algorithm_library)):
+        for col in range (2,6):
             sheet_index.column_dimensions[get_column_letter(col)].width = 20
             sheet_index.row_dimensions[row].height = 40
 
@@ -211,23 +214,29 @@ def sheet_index_init(sheet_index):
     for i in range(len(evaluation_attackIndex)):
         sheet_index[get_column_letter(i+4)+'3'] = evaluation_attackIndex[i]
 
-    for i in range(len(Defense_algorithm_library)):
-        line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*i
-        for j in range(len(evaluation_defenseIndex)-1):
-            sheet_index[get_column_letter(j+line)+'3'] = evaluation_defenseIndex[j]
-        sheet_index[get_column_letter(len(evaluation_defenseIndex)-1+line)+'3'] = Defense_algorithm_library[i]
+    # for i in range(len(Defense_algorithm_library)):
+    #     line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*i
+    #     for j in range(len(evaluation_defenseIndex)-1):
+    #         sheet_index[get_column_letter(j+line)+'3'] = evaluation_defenseIndex[j]
+    #     sheet_index[get_column_letter(len(evaluation_defenseIndex)-1+line)+'3'] = Defense_algorithm_library[i]
         
 
 def save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet):
 
     row = 4 + len(evaluation_indicator)*len(attack_R_type)*Attack_algorithm_library.index(cfg.ATTACKMETHOD)
     row += len(evaluation_indicator)*attack_R_type.index(cfg.ATTACKTYPE+cfg.ATTACKDIRECTION)
-    column1 = chr(ord('G') + Defense_algorithm_library.index(cfg.DEFENSEMETHOD)*2)
-    column2 = chr(ord(column1)+1)
 
-    for col,dict_name in {'E':pure_result,'F':att_result,column1:def_result,column2:def_adv_result}.items():
-        for i in range(len(evaluation_indicator)):
-            sheet[col+str(row+i)] = round(dict_name[evaluation_indicator[i]],2)
+    if not cfg.ONLYDEFENSE:
+        for col,dict_name in {'E':pure_result,'F':att_result}.items():
+            for i in range(len(evaluation_indicator)):
+                sheet[col+str(row+i)] = round(dict_name[evaluation_indicator[i]],2)
+
+    if def_result !=None and def_adv_result!=None :
+        column1 = chr(ord('G') + Defense_algorithm_library.index(cfg.DEFENSEMETHOD)*2)
+        column2 = chr(ord(column1)+1)
+        for col,dict_name in {column1:def_result,column2:def_adv_result}.items():
+            for i in range(len(evaluation_indicator)):
+                sheet[col+str(row+i)] = round(dict_name[evaluation_indicator[i]],2)
 
 def CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet):
 
@@ -236,26 +245,26 @@ def CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def
     row = row_start+bias
     
     AttackIndex = {}
-    DefenseIndex = {}
+    # DefenseIndex = {}
     # AttackIndex calculate
     AttackIndex['DmAP'] = pure_result['mAP']-att_result['mAP']
     AttackIndex['SDSIM'] = 1-SSIM
     AttackIndex['AttackIndex'] = AttackIndex['DmAP']/AttackIndex['SDSIM']
     
-    # DefenseIndex calculate
-    DefenseIndex['def-SDSIM'] = 1-def_SSIM
-    Delta_mAP_keep = pure_result['mAP']-def_result['mAP']
-    Delta_mAP_improve = def_adv_result['mAP']-att_result['mAP']
-    Delta_SSIM = def_SSIM - SSIM
-    DefenseIndex['DefenseIndex'] = Delta_mAP_improve*Delta_SSIM/Delta_mAP_keep
+    # # DefenseIndex calculate
+    # DefenseIndex['def-SDSIM'] = 1-def_SSIM
+    # Delta_mAP_keep = pure_result['mAP']-def_result['mAP']
+    # Delta_mAP_improve = def_adv_result['mAP']-att_result['mAP']
+    # Delta_SSIM = def_SSIM - SSIM
+    # DefenseIndex['DefenseIndex'] = Delta_mAP_improve*Delta_SSIM/Delta_mAP_keep
 
     for i,indicator in enumerate(evaluation_attackIndex):
         sheet[get_column_letter(4+i)+str(row)] = round(AttackIndex[indicator],2)
     
-    line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*Defense_algorithm_library.index(cfg.DEFENSEMETHOD)
-    for i in range(len(evaluation_defenseIndex)-1):
-        sheet[get_column_letter(line+i)+str(row)] = DefenseIndex[evaluation_defenseIndex[i]]
-    sheet[get_column_letter(line+len(evaluation_defenseIndex)-1)+str(row)] = round(DefenseIndex['DefenseIndex'],2)
+    # line = 4+len(evaluation_attackIndex)+len(evaluation_defenseIndex)*Defense_algorithm_library.index(cfg.DEFENSEMETHOD)
+    # for i in range(len(evaluation_defenseIndex)-1):
+    #     sheet[get_column_letter(line+i)+str(row)] = DefenseIndex[evaluation_defenseIndex[i]]
+    # sheet[get_column_letter(line+len(evaluation_defenseIndex)-1)+str(row)] = round(DefenseIndex['DefenseIndex'],2)
 
 
 def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,save_pos= excel_name):
@@ -277,9 +286,12 @@ def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sa
         sheet_index = wb.create_sheet(title = sheet_attackIndex_name)
     sheet_init(sheet)
     sheet_index_init(sheet_index)
-    if def_result != None and def_adv_result != None and pure_result!=None and att_result!=None:
-        save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
+
+    save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
+
+    if pure_result!=None:
         CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet_index)
+
     #save_config(cfg,pure_result,adv_result,def_adv_result,sheet)
     remove_Sheet(wb,sheet_list)
     wb.save(save_pos)
@@ -518,11 +530,19 @@ def analyze_configCondition(args,cfg):
     if args.attack!=None:
 
         list = args.attack.split(":")
-        if len(list)==2:
+        if len(list) == 2:
             attack_type ,cfg.ATTACKMETHOD = list
         elif len(list)==3:
             attack_type ,cfg.ATTACKMETHOD = list[:2]
-            cfg.ATTACKPRETRAINED = True
+            if list[2] == 'P':
+                cfg.ATTACKPRETRAINED = True
+            elif list[2]=='OD':
+                cfg.ONLYDEFENSE = True
+            elif list[2]=='P-OD':
+                cfg.ATTACKPRETRAINED = True
+                cfg.ONLYDEFENSE = True
+            else:
+                raise ValueError(f'input :{args.attack} is not correct, please check usage in USE.md')
         else :
             raise ValueError(f'input :{args.attack} is not correct, please check usage in USE.md')
 

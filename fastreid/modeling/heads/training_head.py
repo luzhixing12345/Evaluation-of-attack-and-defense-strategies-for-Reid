@@ -87,7 +87,7 @@ class TrainingHead(nn.Module):
             cls_outputs = self.classifier(bn_feat, targets)
             pred_class_logits = self.classifier.s * F.linear(F.normalize(bn_feat),
                                                              F.normalize(self.classifier.weight))
-
+        
         #fmt: off
         if self.neck_feat == "before":  feat = global_feat[..., 0, 0]
         elif self.neck_feat == "after": feat = bn_feat
@@ -102,3 +102,4 @@ class TrainingHead(nn.Module):
                 "pred_class_logits": pred_class_logits,
                 "features": feat
             }
+

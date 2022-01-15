@@ -71,10 +71,11 @@ def main(args):
     # query      3368    750                     query      2228    702
     # gallery   15913    751                     gallery    17661   1110
     #                                            train      16522   702
-    pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
-
     
-    if args.attack:
+    if not cfg.ONLYDEFENSE:
+        pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
+    
+    if args.attack and not cfg.ONLYDEFENSE:
         print_info('start attack')
         AttackProcess = attack(cfg)
         AttackProcess.start_attack()

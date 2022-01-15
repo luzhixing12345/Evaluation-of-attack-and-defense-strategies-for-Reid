@@ -2,7 +2,7 @@
 
 ## Our framework includes three parts:
 
-- **Step1: train a Reid model which can do Cross border pedestrian re-identification**
+- **Step1: train a Reid model which can do cross border pedestrian re-identification**
 - **Step2: attack the Reid model by using one of attack algorithm**
 - **Step3: defense the Reid model by using one of defense algorithm**
 
@@ -10,48 +10,70 @@
 
 - `--config-file` (must):load base configuration information, including datasets/batch size/model structure selection. 
  **Need one argument where the configuration file is**.
+  - two datasets including `DukeMTMC` and `Market1501`
+  - two model structure `BOT` for `bagtricksR50.yml` and `AGW` for `AGW_R50.yml` 
  
-- `--train` (optional):  **only** train a Reid model in step 1. **No argument**.
+- `--train` (optional):  **only** train a Reid model in step 1. **No argument**.<br>The model weights will be saved in `./logs/xxx/xxx/model_final.pth`, creat a new folder named `model` in root path, and move it under `./model` 
 
-- `--attack` (optional): use attack algorithm to attack the Reid model. **Need one argument. And the argument consists of two parts** 
+- `--attack` (optional): use attack algorithm to attack the Reid model. **Need one argument. And the argument consists of three parts** 
   - The first part is `attack type`. 
-    - There are `T`(target attack) and `UT`(untarget attack) for classfication attack algorithm(CA).
-    - There are `QA`(query attack) and `GA`(gallery attack) for retrieval attack algorithm, and in retrieval attack you also need to point your attack direction
-        - `+` means to pull the negtive (ground false) samples closer to the images
-        - `-` means to push the positive(ground truth) samples away from the images
-        so your choice must be in [`QA+`,`QA-`,`GA+`,`GA-`]
+  There are `QA`(query attack) and `GA`(gallery attack) for retrieval attack algorithm, and in retrieval attack you also need to point your attack direction
+    - `+` means to pull the negtive (ground false) samples closer to the images
+    - `-` means to push the positive(ground truth) samples away from the images
+  <br>so your choice must be in [`QA+`,`QA-`,`GA+`,`GA-`]
   - The second part is `attack algorithm`
-    - classfication : [`C-FGSM`,`C-IFGSM`,`C-MIFGSM`,`CW`]
-    - retrieval :[`R-FGSM`,`R-IFGSM`,`R-MIFGSM`,`ODFA`,`MISR`,`MUAP`,`SSAE`,`SMA`,`FNA`]
-  - **attention**: `attack type` and `attack algorithm` must match, both in classification or retrieval, and two parts should sperated by `:`.
+    - `FGSM`
+    - `IFGSM`
+    - `MIFGSM`
+    - `ODFA`
+    - `MISR`
+    - `MUAP`
+    - `SSAE`
+    - `FNA`
+  - The third part is flexible
+    - When you are using the attack algorithm `SSAE` or `MISR` , they both needs to train in training set first, and it takes a long time to train. So the first time you use this attack algorithm you need to spend a long time on training it first, and in the following evaluation you can use `P` to use your pretrained attack model to avoid wasting time.
+    - If you don't want to attack the pure Reid model, and just want to attack the defense Reid model,use `OD`, which is the abbreviation of (only defense)
+    - Including the above two cases `P-OD`
+  - Use `:` to connect each part.
   
 - `--defense` (optional): use defense algorithm to defense the Reid model. **Need one argument.** The `defense algorithm` should be chosen in 
-  - general defense algorithm [`ADV`,`GRA`,`DIST`] 
-  - retrieval defense algorithm [`GOAT`,`EST`,`SES`,`PNP`]
-  but you don't need to distinguish between defense types
+  - `ADV`
+  - `GOAT`
+  - `EST`
+  - `SES`
+  - `PNP`
   
 - `-record` (optional) : to record your evaluation result. It will be saved in an excel in the root path as `./result.xlsx`. Except long python terminal outputs, all your works will be recorded in file `./log.txt` with a short and clear notes, you don't need to worry about that `log.txt` will be recovered because all the notes would be written at the end of the file. **No argument**
 
-- `--pretrained` (optional): use pretrained attack model. **No argument**. 
-
-   **Pay attention that** when you are using the attack algorithm `SSAE` or `MISR` , they both needs to train in training set first, it takes a long time to train. So the first time you use this attack algorithm you need to spend a long time on training it first, and **in the following evaluation you can add the argument in the command line to use your pretrained attack model** to avoid wasting time, or **directly download our pretrained attack model in [Model_zoo.md](Model_zoo.md) to save your first training time**
 
 ## examples
-
-#### 1.train a reid model in DukeMTMC
+basic format for train
+```bash
+python3 tools/train_net.py --config-file ./configs/DATASETS/FILE -train MODEL.DEVICE 'cuda:0'
+```
+basic format for attack and defense
+```bash
+python3 tools/train_net.py --config-file ./configs/DATASETS/FILE --attack X:X:X --defense X MODEL.DEVICE 'cuda:0'
+```
+#### 1.train a reid model in DukeMTMC bot
 ```bash
 python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --train MODEL.DEVICE 'cuda:0'
 ```
-#### 2.attack the reid model by SSAE in QA+ with a pretrained SSAE attack model without record
+#### 2.attack a reid model of DukeMTMC bot by FGSM in QA-
 ```bash
-python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA+:SSAE --pretrained MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA-:FGSM MODEL.DEVICE 'cuda:0'
 ```
-#### 3.attack and defense and record
+#### 3.attack a reid model of Market1501 agw by MUAP in QA-, and defense in ADV
 ```bash
-python3 tools/train_net.py --config-file ./configs/Market1501/bagtricks_R50.yml --attack GA-:R-IFGSM --defense GRA --record MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/Market1501/AGW_R50.yml --attack QA-:MUAP --defense ADV MODEL.DEVICE 'cuda:0'
 ```
+#### 4.attack the reid model by SSAE in QA+ with a pretrained SSAE attack model without record, and defense in GOAT
 ```bash
-python3 tools/train_net.py --config-file ./configs/Market1501/bagtricks_R50.yml --attack T:C-IFGSM --defense GOAT --record MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA+:SSAE:P --defense GOAT MODEL.DEVICE 'cuda:0'
+```
+#### 5.attack the defense model
+```bash
+python3 tools/train_net.py --config-file ./configs/Market1501/bagtricks_R50.yml --attack GA-:IFGSM:OD --defense SES --record MODEL.DEVICE 'cuda:0'
 ```
 
 **If you meet any issue in your work, please first check out whether your command line input usage is right, and then look up in [Issues.md](Issues.md). If the problem still exists, leave your issue and I will reply as soon as possible.**

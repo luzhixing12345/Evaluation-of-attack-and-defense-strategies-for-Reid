@@ -9,13 +9,6 @@
 It occurs when your GPU has no availale memory for you to malloc, try to decrease `batch size` while training or testing by adding the following parse argument
 default batch size for training is `64` for C/Q/GA part is `128`
 ```
-#in training:
-
 python3 tools/train_net.py --config-file xxx.yml --attack xxx:xxx --defense xxx --record MODEL.DEVICE 'cuda:0' SOLVER.IMS_PER_BATCH 32
-
-#in C/Q/GA:
-
-python3 tools/train_net.py --config-file xxx.yml --attack xxx:xxx --defense xxx --record MODEL.DEVICE 'cuda:0' TEST.IMS_PER_BATCH 32
 ```
-
 ### waiting for editing~

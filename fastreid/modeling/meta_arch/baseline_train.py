@@ -18,8 +18,6 @@ class Baseline_train(nn.Module):
         super().__init__()
         self._cfg = cfg
         assert len(cfg.MODEL.PIXEL_MEAN) == len(cfg.MODEL.PIXEL_STD)
-        self.register_buffer("pixel_mean", torch.tensor(cfg.MODEL.PIXEL_MEAN).view(1, -1, 1, 1))
-        self.register_buffer("pixel_std", torch.tensor(cfg.MODEL.PIXEL_STD).view(1, -1, 1, 1))
 
         # backbone
         self.backbone = build_backbone(cfg)
@@ -53,6 +51,9 @@ class Baseline_train(nn.Module):
                         'scale': cfg.MODEL.LOSSES.COSFACE.SCALE
                     }
                 }
+        self.register_buffer("pixel_mean", torch.tensor(cfg.MODEL.PIXEL_MEAN).view(1, -1, 1, 1))
+        self.register_buffer("pixel_std", torch.tensor(cfg.MODEL.PIXEL_STD).view(1, -1, 1, 1))
+
 
     @property
     def device(self):

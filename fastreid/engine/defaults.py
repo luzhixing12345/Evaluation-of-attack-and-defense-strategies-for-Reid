@@ -53,7 +53,7 @@ def default_argument_parser():
     parser.add_argument("--train", action="store_true", help="to train the original model")
     parser.add_argument("--attack",nargs="?", help="attack the model")
     parser.add_argument("--defense",nargs="?", help="defend the model")
-    parser.add_argument("--record",action="store_true", help="whether to record the result in the excel")
+    parser.add_argument("--record",default=True, help="whether to record the result in the excel")
     parser.add_argument("--log", default=True, help="log the work")
     parser.add_argument("--save-pic", action="store_true", help="save pictures of query set and gallery set after attack and defense ")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")

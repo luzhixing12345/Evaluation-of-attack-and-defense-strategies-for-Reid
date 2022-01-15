@@ -2,6 +2,7 @@
 
 
 import functools as ft
+from numpy.lib.type_check import imag
 import torch.nn.functional as F
 import torch
 import numpy as np
@@ -31,7 +32,7 @@ def RobRank_defense(cfg,train_set,str):
     elif str == 'EST':
         train_step = est_training_step
     elif str == 'PNP':
-        train_step = pnp_training_step
+        train_step = ACT_training_step
     else:
         raise KeyError
 
@@ -43,6 +44,7 @@ def RobRank_defense(cfg,train_set,str):
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
     max_id =4000
     EPOCH = 3
+    #eval_train(model,train_set,max_id=500)
     
     for epoch in range(EPOCH):
         model.train()
@@ -50,17 +52,18 @@ def RobRank_defense(cfg,train_set,str):
         for id,data in enumerate(train_set):
             if id>max_id:
                 break
-            optimizer.zero_grad()
+            
             images = (data['images']/255.0).to(device)
             labels = data['targets'].to(device)
 
-            model.heads.mode = 'F'
+            #model.heads.mode = 'F'
+            optimizer.zero_grad()
             loss = train_step(model,images,labels,id)
 
             loss_total+=loss
             loss.backward()
             optimizer.step()
-        eval_train(model,train_set,max_id=400)
+        #eval_train(model,train_set,max_id=500)
         print(f'loss_total = {loss_total} in epoch {epoch}')
     
     print(f'finished {str}_training !')
@@ -82,7 +85,7 @@ def est_training_step(model, images, labels,id):
     '''
     # generate adversarial examples
     #advatk_metric = 'C' if model.dataset in ('mnist', 'fashion') else 'C'
-    model.heads.mode = 'C'
+    model.heads.mode = 'F'
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
                       pgditer=24,
@@ -124,7 +127,7 @@ def mmt_training_step(model: torch.nn.Module, images,labels,id):
     '''
     # evaluate original benign sample
     model.eval()
-    model.heads.mode = 'F'
+    model.heads.mode = 'C'
     loss_fun = ptriplet()
     with torch.no_grad():
         output_orig = model(images)
@@ -141,8 +144,6 @@ def mmt_training_step(model: torch.nn.Module, images,labels,id):
                       metric='N', verbose=False)
     model.eval()
     images_pnp = pnp.minmaxtriplet(images, triplets)
-    images_pnp = images_pnp.clone().detach()
-    images_pnp.requires_grad_()
     
     if id % 800 == 0:
         print(f'ssim = {eval_ssim(images,images_pnp)}')
@@ -168,7 +169,7 @@ def mmt_training_step(model: torch.nn.Module, images,labels,id):
 
     return loss
 
-def pnp_training_step(model: torch.nn.Module, images,labels,id):
+def ACT_training_step(model: torch.nn.Module, images,labels,id):
     '''
     Adversarial training with Positive/Negative Perplexing (PNP) Attack.
     Function signature follows pytorch_lightning.LightningModule.training_step,
@@ -184,15 +185,12 @@ def pnp_training_step(model: torch.nn.Module, images,labels,id):
     This defense is not agnostic to backbone architecure and metric learning
     loss. But it is recommended to use it in conjunction with triplet loss.
     '''
-    # check loss function
-
-    # prepare data batch in a proper shape
-    
     model.eval()
-    model.heads.mode = 'C'
+    model.heads.mode = 'F'
     with torch.no_grad():
         output_orig = model(images)
-        model.train()
+
+    model.train()
     # generate adversarial examples
     loss_fun = ptriplet()
     triplets = miner(output_orig, labels, method=loss_fun._minermethod,
@@ -200,25 +198,25 @@ def pnp_training_step(model: torch.nn.Module, images,labels,id):
                      margin=margin_euclidean if loss_fun._metric in ('E', 'N')
                      else margin_cosine)
     anc, pos, neg = triplets
-    model.eval()
     pnp = PositiveNegativePerplexing(model, eps=4. / 255.,
                                     alpha=1. / 255.,
                                     pgditer=24,
                                     device = 'cuda',
                                     metric='N', verbose=False)
     # Collapsing positive and negative -- Anti-Collapse Triplet (ACT) defense.
-    model.eval()
     images_pnp = pnp.pncollapse(images, triplets)
-    if id %800 ==0:
-        print(f'ssim = {eval_ssim(images,images_pnp)}')
+
+    if id%800==0:
+        print('ssim = ',eval_ssim(images,images_pnp))
+    
     # Adversarial Training
     model.train()
+    model.heads.mode = 'F'
     pnemb = model(images_pnp)
     aemb = model(images[anc, :, :, :])
     pnemb = F.normalize(pnemb)
     aemb = F.normalize(aemb)
     # compute adversarial loss
-    model.train()
     loss = loss_fun.raw(aemb, pnemb[:len(pnemb) // 2],
                               pnemb[len(pnemb) // 2:]).mean()
 
@@ -234,9 +232,9 @@ def ses_training_step(model, images,labels,id):
     This defense has been discussed in the supplementary material / appendix
     of the ECCV20 paper. (See arxiv: 2002.11293)
     '''
-    model.heads.mode = 'C'
-    images = images.clone().detach()
-    images.requires_grad_()
+    model.heads.mode = 'F'
+    # images = images.clone().detach()
+    # images.requires_grad_()
         # generate adversarial examples
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
@@ -248,16 +246,19 @@ def ses_training_step(model, images,labels,id):
     if id % 800 ==0:
         print(f'ssim = {eval_ssim(images,advimgs)}')
     # evaluate advtrain loss
+    model.heads.mode ='FC'
     output_orig = model(images)
-    loss_orig = ptriplet()(output_orig, labels)
+    loss_orig = model.losses(output_orig, labels)
+    model.heads.mode = 'F'
     output_adv = model(advimgs)
     # select defense method
+    output_orig = output_orig['features']
     nori = F.normalize(output_orig)
     nadv = F.normalize(output_adv)
     embshift = F.pairwise_distance(nadv, nori)
     # loss and log
     # method 1: loss_triplet + loss_embshift
-    loss = loss_orig + 1.0 * embshift.mean()
+    loss = sum(loss_orig.values()) + 1.0 * embshift.mean()
     # method 2: loss_triplet + loss_embshiftp2
     #loss = loss_orig + 1.0 * (embshift ** 2).mean()
 
@@ -418,7 +419,7 @@ class PositiveNegativePerplexing(object):
             optm.zero_grad()
             optx.zero_grad()
             # forward data to be perturbed
-            emb = self.model.forward(images)
+            emb = self.model(images)
             if self.metric in ('C', 'N'):
                 emb = F.normalize(emb)
             # draw two samples close to each other

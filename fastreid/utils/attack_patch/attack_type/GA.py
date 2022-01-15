@@ -221,11 +221,17 @@ class GalleryAttack:
                 self.result['Rank-{}'.format(r)] += cmc[r - 1]>=1
             self.result['mAP']+=AP
 
+            #debug
+            # print('dist.shape = ',dist.shape)
+            # print('order.shape = ',order.shape)
+            # print('raw_cmc = ',raw_cmc)
+            # print('sort_idx = ',order[keep])
+            # print(np.where(raw_cmc == 1)[0])
             sort_idx = order[keep]
             ind_pos = np.where(raw_cmc == 1)[0]
             ind_neg = np.where(raw_cmc == 0)[0]
-            self.pos.extend(dist[sort_idx[ind_pos]])
-            self.neg.extend(dist[sort_idx[ind_neg]])
+            self.pos.extend(dist[0][sort_idx[ind_pos]])
+            self.neg.extend(dist[0][sort_idx[ind_neg]])
 
 
     def get_result(self):
