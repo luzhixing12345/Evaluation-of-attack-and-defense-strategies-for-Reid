@@ -13,7 +13,7 @@
   - two datasets including `DukeMTMC` and `Market1501`
   - two model structure `BOT` for `bagtricksR50.yml` and `AGW` for `AGW_R50.yml` 
  
-- `--train` (optional):  **only** train a Reid model in step 1. **No argument**.<br>The model weights will be saved in `./logs/xxx/xxx/model_final.pth`, creat a new folder named `model` in root path, and move it under `./model` 
+- `--train` (optional):  **only** train a Reid model in step 1. **No argument**.<br>The model weights will be saved in `./logs/xxx/xxx/model_final.pth`, creat a new folder named `model` in root path, and **rename it** and **move** it under `./model` like `./model/model_DukeMTMC_bot.pth` or `./model/model_Market1501_agw.pth`
 
 - `--attack` (optional): use attack algorithm to attack the Reid model. **Need one argument. And the argument consists of three parts** 
   - The first part is `attack type`. 
