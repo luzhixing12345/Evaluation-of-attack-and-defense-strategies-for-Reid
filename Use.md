@@ -37,11 +37,13 @@
   - Use `:` to connect each part.
   
 - `--defense` (optional): use defense algorithm to defense the Reid model. **Need one argument.** The `defense algorithm` should be chosen in 
-  - `ADV`
-  - `GOAT`
-  - `EST`
-  - `SES`
-  - `PNP`
+  - The first part,defense type
+     - `ADV`
+     - `GOAT`
+     - `EST`
+     - `SES`
+     - `PNP`
+  - The second part,after training your defense model first time, you could use `:` to load the pretrained defense model
   
 Each result will be saved in an excel in the root path as `./result.xlsx`. Except long python terminal outputs, all your works will be recorded in file `./log.txt` with a short and clear notes, you don't need to worry about that `log.txt` will be recovered because all the notes would be written at the end of the file. **No argument**
 
@@ -63,9 +65,9 @@ python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --
 ```bash
 python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA-:FGSM MODEL.DEVICE 'cuda:0'
 ```
-#### 3.attack a reid model of Market1501 agw by MUAP in QA-, and defense in ADV
+#### 3.attack a reid model of Market1501 agw by MUAP in QA-, and defense in ADV,use pretrained defense model
 ```bash
-python3 tools/train_net.py --config-file ./configs/Market1501/AGW_R50.yml --attack QA-:MUAP --defense ADV MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/Market1501/AGW_R50.yml --attack QA-:MUAP --defense ADV: MODEL.DEVICE 'cuda:0'
 ```
 #### 4.attack the reid model by SSAE in QA+ with a pretrained SSAE attack model without record, and defense in GOAT
 ```bash
