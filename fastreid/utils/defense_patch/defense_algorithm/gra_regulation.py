@@ -3,7 +3,7 @@
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, get_result, get_train_set
+from fastreid.utils.reid_patch import get_result, get_train_set
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
@@ -15,7 +15,7 @@ def gradient_regulation(cfg,train_data_loader):
     
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)  #启用baseline_for_defense
-    model.preprocess_image = change_preprocess_image(cfg)
+    model.RESIZE = True
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
     model.to(device)
 

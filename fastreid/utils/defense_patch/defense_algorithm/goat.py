@@ -8,7 +8,7 @@ import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.advertorch.attacks import PGDAttack
-from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_result, get_train_set, pairwise_distance
+from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set, pairwise_distance
 import numpy as np
 
 device='cuda'
@@ -18,8 +18,8 @@ def GOAT(cfg,train_data_loader):
 
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)
-    model.preprocess_image = change_preprocess_image(cfg)
-    model.heads.mode = 'F'
+    model.RESIZE = True
+    model.heads.MODE = 'F'
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
     model.to(device)
 

@@ -20,3 +20,4 @@ gdown
 faiss-cpu
 advertorch
 openpyxl
+scikit-image

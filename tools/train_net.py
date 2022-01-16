@@ -13,9 +13,8 @@ from fastreid.engine import (DefaultTrainer, default_argument_parser,
 from fastreid.utils.attack_patch.attack_process import attack
 from fastreid.utils.defense_patch.defense_process import defense
 from fastreid.utils.reid_patch import (
-                                       analyze_configCondition, get_result, print_info,
+                                       analyze_configCondition, get_result, move_model_pos, print_info,
                                        record)
-
 
 
 def setup(args):
@@ -40,6 +39,7 @@ def main(args):
         trainer = DefaultTrainer(cfg)
         trainer.resume_or_load(resume=args.resume)
         trainer.train()
+        move_model_pos(cfg)
         return 
 
     # query_set = get_query_set(cfg)  
@@ -47,8 +47,7 @@ def main(args):
     # train_set = get_train_set(cfg)  
     cfg.defrost()
     cfg.MODEL.BACKBONE.PRETRAIN = False
-    cfg.MODEL.WEIGHTS='./model/model_.pth'
-    cfg.MODEL.WEIGHTS=cfg.MODEL.WEIGHTS[0:-4]+cfg.DATASETS.NAMES[0]+'_'+cfg.CFGTYPE+cfg.MODEL.WEIGHTS[-4:]
+    cfg.MODEL.WEIGHTS=f'./model/{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
 
     # the final result conclude some evaluating indicator, which you can get from ./fastreid/utils/reid_patch.py
     # if you want to update or change it, you can find the computing method in fastreid\evaluation\reid_evaluation.py
@@ -61,6 +60,7 @@ def main(args):
     def_adv_result=None  
     SSIM=None
     def_SSIM = None
+    
     # the model positions have been already defined in fastreid\config\defaults.py 
     # _C.MODEL.WEIGHTS                = "./model/model_final.pth"       the origin model after training 
     # _C.MODEL.TESTSET_TRAINED_WEIGHT = './model/test_trained.pth'      the model that can classify well in query set

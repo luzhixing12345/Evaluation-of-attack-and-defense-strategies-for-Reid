@@ -54,7 +54,7 @@ def get_train_set(cfg):
 def eval_train(model,data_loader,max_id=-1):
     print('*****************evluation*****************\n')
     model.eval()
-    model.heads.mode = 'C'
+    model.heads.MODE = 'C'
     correct = 0 
     softmax = nn.Softmax(dim=1)
     n=0
@@ -140,23 +140,6 @@ def classify_test_set(cfg,data_loader):
     # cfg.TESTSET_TRAINED_WEIGHT
     print('the model was saved in ./model/test_trained.pth')
 
-def change_preprocess_image(cfg):
-    def preprocess_image(batched_inputs):
-        """
-        Normalize and batch the input images.
-        """
-        if isinstance(batched_inputs, dict):
-            images = batched_inputs["images"].to(device)
-        elif isinstance(batched_inputs, torch.Tensor):
-            images = batched_inputs.to(device)
-        else:
-            raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
-        
-        images = torch.mul(images,255)
-        images = torch.sub(images,torch.tensor(cfg.MODEL.PIXEL_MEAN).view(1, -1, 1, 1).to(device))
-        images = torch.div(images,torch.tensor(cfg.MODEL.PIXEL_STD).view(1, -1, 1, 1).to(device))
-        return images
-    return preprocess_image
     
 def get_result(cfg,model_path,step:str)->dict:
     model =DefaultTrainer.build_model(cfg)  # 启用baseline,用于测评
@@ -589,3 +572,18 @@ def analyze_configCondition(args,cfg):
     print('---------------------------------------------------------')
     print('---------------------------------------------------------')
     return cfg
+
+def move_model_pos(cfg):
+    # ./configs/DukeMTMC/bagtricks_R50.yml
+    if not os.path.exists('model'):
+        os.makedirs('./model')
+    origin_pos = f'{cfg.OUTPUT_DIR}/model.best.pth'
+    target_pos = f'./model/{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
+    shutil.move(origin_pos,target_pos)
+    print(f'already move {origin_pos} to {target_pos}')
+
+def make_dict(images,targets):
+    dict = {'images':images,'targets':targets}
+    return dict
+
+

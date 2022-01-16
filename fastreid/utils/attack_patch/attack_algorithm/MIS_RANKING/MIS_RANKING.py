@@ -11,12 +11,11 @@ import torch.nn as nn
 import torch.optim as optim
 
 from fastreid.engine.defaults import DefaultTrainer
-from fastreid.modeling.heads.build import build_heads
 from fastreid.utils.checkpoint import Checkpointer
 from .GD import Generator, MS_Discriminator, Pat_Discriminator, GANLoss, ResnetG, weights_init
 from .advloss import DeepSupervision, adv_CrossEntropyLoss, adv_CrossEntropyLabelSmooth, adv_TripletLoss
 
-from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_train_set
+from fastreid.utils.reid_patch import eval_ssim, get_train_set, make_dict
 
 is_training = False
 Imagenet_mean = [0.485, 0.456, 0.406]
@@ -42,14 +41,14 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
   model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
-  model.preprocess_image=change_preprocess_image(cfg) # re-range the input size to [0,1]
+  #model.RESIZE = True
   Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
   model.to(device)
 
   check_freezen(model, need_modified=True, after_modified=False)
 
-  #G = Generator(3, 3, 32, norm='bn').apply(weights_init)
-  G = ResnetG(3,3,32).apply(weights_init)
+  G = Generator(3, 3, 32, norm='bn').apply(weights_init)
+  #G = ResnetG(3,3,32).apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
   #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
@@ -64,11 +63,11 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
 
   
-  EPOCH = 10
+  EPOCH = 20
   SSIM = 0
   if not pretrained:
-    G.load_state_dict(torch.load(G_save_pos))
-    D.load_state_dict(torch.load(D_save_pos))
+    # G.load_state_dict(torch.load(G_save_pos))
+    # D.load_state_dict(torch.load(D_save_pos))
     for epoch in range(EPOCH):
       ssim = train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
       print(f'average ssim in epoch {epoch} is {ssim}')
@@ -94,20 +93,19 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, trainloader,ak_type):
   G.train()
   D.train()
-
   loss_G_total = 0
   loss_D_total = 0
   SSIM = []
   print(f"start training epoch {epoch} for Mis-ranking model G and D")
   for batch_idx, data in enumerate(trainloader):
-    if batch_idx>4000:
+    if batch_idx>5000:
       break
-    imgs = (data['images']/255).cuda()
-    #imgs = data['images'].cuda()
+    #imgs = (data['images']/255).cuda()
+    imgs = data['images'].cuda()
     pids = data['targets'].cuda()
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
 
-    if batch_idx % 800 == 0:
+    if batch_idx % 1000 == 0:
       ssim = eval_ssim(imgs,new_imgs)
       print(f'ssim = {ssim}')
       SSIM.append(ssim)
@@ -128,15 +126,11 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_G_GAN = criterionGAN(pred_fake, True)               
     
     # Re-ID advloss
-    model.heads.mode = 'FC'
-    output = model(new_imgs)
+    model.heads.MODE = 'FC'
+    output = model(make_dict(new_imgs,targets))
 
     new_outputs = output['cls_outputs']
     new_features = output['features']
-    # model.heads.mode = 'C'
-    # new_outputs = model(new_imgs)
-    # model.heads.mode = 'F'
-    # features = model(new_imgs)
 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0
     targets = None
@@ -162,18 +156,19 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     # loss_G.backward(retain_graph=True)
     loss_G.backward()
     optimizer_G.step()
+
     # update discriminator weights
     optimizer_D.zero_grad()
     loss_D.backward()
     optimizer_D.step()
 
 
-  #   loss_G_total+=loss_G.item()
-  #   loss_D_total+=loss_D.item()
+    loss_G_total+=loss_G.item()
+    loss_D_total+=loss_D.item()
 
   
-  # print(f'loss_G = {loss_G_total}')
-  # print(f'loss_D = {loss_D_total}')
+  print(f'loss_G = {loss_G_total}')
+  print(f'loss_D = {loss_D_total}')
   return average(SSIM)
 
 
@@ -196,7 +191,7 @@ def perturb(imgs, G, D, cfg,train_or_test='test'):
 
 def L_norm(cfg,delta, mode='train'):
 
-  # delta.data += 1 
+  delta.data += 1 
   delta.data *= 0.5
 
   for c in range(3):
@@ -229,7 +224,6 @@ class generator:
     # y is not used in SSAE, Just for universal adaptation
     if len(images.shape)==5:
         return self.GA(images)
-
 
     new_imgs, _,_ = perturb(images, self.G, self.D,self.cfg, train_or_test='test')
 

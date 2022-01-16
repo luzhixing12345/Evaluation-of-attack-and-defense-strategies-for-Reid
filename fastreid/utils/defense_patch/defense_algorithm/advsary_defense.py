@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, get_result, get_train_set
+from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set
 from fastreid.utils.attack_patch.attack_algorithm import *
 device='cuda'
  
@@ -22,16 +22,16 @@ class adversary_defense:
     def initialization(self):
         self.cfg = DefaultTrainer.auto_scale_hyperparams(self.cfg,self.train_set.dataset.num_classes)
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
-        self.model.preprocess_image = change_preprocess_image(self.cfg)
+        self.model.RESIZE = True
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
         self.model.to(device)
 
         self.SSAE_generator = None
         self.MISR_generator = None
         if self.cfg.ATTACKMETHOD == 'SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=True)
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.cfg.ATTACKPRETRAINED)
         elif self.cfg.ATTACKMETHOD == 'MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=True)
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=self.cfg.ATTACKPRETRAINED)
 
 
     def get_defense_result(self):
@@ -48,7 +48,7 @@ class adversary_defense:
         alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data 
 
         self.model.train()
-        self.model.heads.mode = 'C'
+        self.model.heads.MODE = 'C'
         for epoch in range(EPOCH):
             loss_total = 0
             for id,data in enumerate(self.train_set):
@@ -91,7 +91,7 @@ class adversary_defense:
         eps=0.05
         eps_iter=1.0/255.0
         self.target = False
-        self.model.heads.mode = 'C'
+        self.model.heads.MODE = 'C'
 
         dict = {
             'FGSM'    :FGSM  (self.cfg,self.model, loss_fn, eps=eps, targeted=self.target),

@@ -119,7 +119,7 @@ _C.MODEL.LOSSES.COSFACE.GAMMA = 128
 _C.MODEL.LOSSES.COSFACE.SCALE = 1.0
 
 # Path to a checkpoint file to be loaded to the model. You can find available models in the model zoo.
-_C.MODEL.WEIGHTS = "./model/"
+_C.MODEL.WEIGHTS = ""
 
 _C.MODEL.DEFENSE_TRAINED_WEIGHT = ""
 
@@ -133,11 +133,6 @@ _C.DEFENSEPRETRAINED = False
 _C.CFGTYPE = ""
 _C.ONLYDEFENSE = False
 
-
-_C.TARGET = False
-_C.RAND = False
-_C.NB_R = 4
-_C.PULL = True
 
 # Values to be used for image normalization
 _C.MODEL.PIXEL_MEAN = [0.485*255, 0.456*255, 0.406*255]

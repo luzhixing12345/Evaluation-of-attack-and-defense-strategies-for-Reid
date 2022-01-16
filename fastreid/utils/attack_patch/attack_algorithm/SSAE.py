@@ -259,7 +259,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
 
     generator = SSAE().to(device)
     generator = nn.DataParallel(generator)
-    save_pos = './model/SSAE_generator_weights.pth'
+    save_pos = f'./model/SSAE_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
     generator.train()
     train_loader = get_train_set(cfg)
     cosine_loss = CosineLoss().to(device)

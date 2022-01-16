@@ -1,6 +1,6 @@
 
-a = ""
-if a==None:
-    print(1)
-else:
-    print(2)
+
+import torch
+
+a = torch.tensor([1,2,3,4])
+print(a.max())

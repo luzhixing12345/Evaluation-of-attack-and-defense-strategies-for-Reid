@@ -9,7 +9,7 @@ from fastreid.engine import DefaultTrainer
 from sklearn import metrics
 from fastreid.utils.attack_patch.attack_algorithm import *
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import CHW_to_HWC, change_preprocess_image, get_query_set
+from fastreid.utils.reid_patch import CHW_to_HWC,get_query_set
 
 
 from fastreid.utils.compute_dist import build_dist
@@ -33,8 +33,8 @@ class GalleryAttack:
     def default_setup(self):
 
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
-        self.model.preprocess_image = change_preprocess_image(self.cfg) 
-        self.model.heads.mode = 'F'
+        self.model.RESIZE = True
+        self.model.heads.MODE = 'F'
         self.model.to(self.device)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
 

@@ -2,14 +2,12 @@
 
 
 import functools as ft
-from numpy.lib.type_check import imag
 import torch.nn.functional as F
 import torch
 import numpy as np
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.defense_patch.defense_algorithm.goat import get_distances
-from fastreid.utils.reid_patch import change_preprocess_image, eval_ssim, eval_train, get_result, get_train_set, pairwise_distance
+from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
 from .robrank import *
 margin_cosine: float = 0.2
 margin_euclidean: float = 1.0
@@ -38,7 +36,7 @@ def RobRank_defense(cfg,train_set,str):
 
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.preprocess_image = change_preprocess_image(cfg)
+    model.RESIZE = True
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
@@ -56,7 +54,7 @@ def RobRank_defense(cfg,train_set,str):
             images = (data['images']/255.0).to(device)
             labels = data['targets'].to(device)
 
-            #model.heads.mode = 'F'
+            #model.heads.MODE = 'F'
             optimizer.zero_grad()
             loss = train_step(model,images,labels,id)
 
@@ -85,7 +83,7 @@ def est_training_step(model, images, labels,id):
     '''
     # generate adversarial examples
     #advatk_metric = 'C' if model.dataset in ('mnist', 'fashion') else 'C'
-    model.heads.mode = 'F'
+    model.heads.MODE = 'F'
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
                       pgditer=24,
@@ -98,8 +96,8 @@ def est_training_step(model, images, labels,id):
     if id%800==0:
         print('ssim = ',eval_ssim(images,advimgs))
                 
-    model.heads.mode = 'FC'
-    outputs = model(advimgs)
+    model.heads.MODE = 'FC'
+    outputs = model(make_dict(advimgs,labels))
 
     loss_dict = model.losses(outputs,labels)
     loss = sum(loss_dict.values())
@@ -127,7 +125,7 @@ def mmt_training_step(model: torch.nn.Module, images,labels,id):
     '''
     # evaluate original benign sample
     model.eval()
-    model.heads.mode = 'C'
+    model.heads.MODE = 'C'
     loss_fun = ptriplet()
     with torch.no_grad():
         output_orig = model(images)
@@ -159,7 +157,7 @@ def mmt_training_step(model: torch.nn.Module, images,labels,id):
         pnemb[2 * len(pnemb) // 3:]).mean()
     
                 
-    # model.heads.mode = 'FC'
+    # model.heads.MODE = 'FC'
     # outputs = model(adv_images)
 
     # #outputs = model(images)
@@ -186,7 +184,7 @@ def ACT_training_step(model: torch.nn.Module, images,labels,id):
     loss. But it is recommended to use it in conjunction with triplet loss.
     '''
     model.eval()
-    model.heads.mode = 'F'
+    model.heads.MODE = 'F'
     with torch.no_grad():
         output_orig = model(images)
 
@@ -206,14 +204,11 @@ def ACT_training_step(model: torch.nn.Module, images,labels,id):
     # Collapsing positive and negative -- Anti-Collapse Triplet (ACT) defense.
     images_pnp = pnp.pncollapse(images, triplets)
 
-    if id%800==0:
-        print('ssim = ',eval_ssim(images,images_pnp))
-    
     # Adversarial Training
     model.train()
-    model.heads.mode = 'F'
-    pnemb = model(images_pnp)
-    aemb = model(images[anc, :, :, :])
+    model.heads.MODE = 'C'
+    pnemb = model(make_dict(images_pnp,labels))
+    aemb = model(make_dict(images[anc, :, :, :],labels))
     pnemb = F.normalize(pnemb)
     aemb = F.normalize(aemb)
     # compute adversarial loss
@@ -232,7 +227,7 @@ def ses_training_step(model, images,labels,id):
     This defense has been discussed in the supplementary material / appendix
     of the ECCV20 paper. (See arxiv: 2002.11293)
     '''
-    model.heads.mode = 'F'
+    model.heads.MODE = 'F'
     # images = images.clone().detach()
     # images.requires_grad_()
         # generate adversarial examples
@@ -246,10 +241,10 @@ def ses_training_step(model, images,labels,id):
     if id % 800 ==0:
         print(f'ssim = {eval_ssim(images,advimgs)}')
     # evaluate advtrain loss
-    model.heads.mode ='FC'
-    output_orig = model(images)
+    model.heads.MODE ='FC'
+    output_orig = model(make_dict(advimgs,labels))
     loss_orig = model.losses(output_orig, labels)
-    model.heads.mode = 'F'
+    model.heads.MODE = 'F'
     output_adv = model(advimgs)
     # select defense method
     output_orig = output_orig['features']

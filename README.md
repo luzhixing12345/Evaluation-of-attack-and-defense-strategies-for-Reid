@@ -25,6 +25,7 @@ Our code is developed and expanded for the second time based on [fastreid](https
 - tabulate
 - [faiss](https://github.com/facebookresearch/faiss) `pip install faiss-cpu`
 - openpyxl
+- scikit-image
 
 
 
@@ -37,7 +38,6 @@ conda install pytorch==1.6.0 torchvision tensorboard -c pytorch
 pip install -r docs/requirements.txt
 conda install Cython
 conda install yaml
-conda install scikit-image=0.15.0
 conda install -c conda-forge tensorboardx
 ```
 
