@@ -3,7 +3,6 @@ import torch
 from torch import nn
 from torch._C import dtype
 
-from fastreid.utils.reid_patch import log
 
 __all__ = ['DeepSupervision', 'adv_CrossEntropyLoss','adv_CrossEntropyLabelSmooth', 'adv_TripletLoss']
 
