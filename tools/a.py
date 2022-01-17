@@ -1,10 +1,7 @@
 
 
-from calendar import c
-import torch
-
-a = torch.tensor([1,2,3,4])
-
-a = {'1':2,'3':4}
-for x,y in a.items():
-    print(x,y)
+file = open('123.txt','a')
+file.write(f"            attack  method    = {123}\n")
+file.write(f"            attack  type      = {234}\n")
+file.write(f"            attack  direction = {123}\n")
+file.close()

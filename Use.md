@@ -51,31 +51,31 @@ Each result will be saved in an excel in the root path as `./result.xlsx`. Excep
 ## examples
 basic format for train
 ```bash
-python3 tools/train_net.py --config-file ./configs/DATASETS/FILE -train MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DATASETS/FILE -train 
 ```
 basic format for attack and defense
 ```bash
-python3 tools/train_net.py --config-file ./configs/DATASETS/FILE --attack X:X:X --defense X MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DATASETS/FILE --attack X:X:X --defense X 
 ```
 #### 1.train a reid model in DukeMTMC bot
 ```bash
-python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --train MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --train 
 ```
 #### 2.attack a reid model of DukeMTMC bot by FGSM in QA-
 ```bash
-python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA-:FGSM MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA-:FGSM 
 ```
 #### 3.attack a reid model of Market1501 agw by MUAP in QA-, and defense in ADV,use pretrained defense model
 ```bash
-python3 tools/train_net.py --config-file ./configs/Market1501/AGW_R50.yml --attack QA-:MUAP --defense ADV: MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/Market1501/AGW_R50.yml --attack QA-:MUAP --defense ADV: 
 ```
 #### 4.attack the reid model by SSAE in QA+ with a pretrained SSAE attack model without record, and defense in GOAT
 ```bash
-python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA+:SSAE:P --defense GOAT MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA+:SSAE:P --defense GOAT 
 ```
-#### 5.attack the defense model
+#### 5.only attack the defense model, with defense model pretrained
 ```bash
-python3 tools/train_net.py --config-file ./configs/Market1501/bagtricks_R50.yml --attack GA-:IFGSM:OD --defense SES --record MODEL.DEVICE 'cuda:0'
+python3 tools/train_net.py --config-file ./configs/Market1501/bagtricks_R50.yml --attack GA-:IFGSM:OD --defense SES:
 ```
 
 **If you meet any issue in your work, please first check out whether your command line input usage is right, and then look up in [Issues.md](Issues.md). If the problem still exists, leave your issue and I will reply as soon as possible.**

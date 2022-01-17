@@ -35,7 +35,7 @@ def GOAT(cfg,train_data_loader):
 
     criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     EPOCH = 5
-    frequency = 20
+    frequency = 50
 
     for id,data in enumerate(train_data_loader):
         if id>max_epoch:

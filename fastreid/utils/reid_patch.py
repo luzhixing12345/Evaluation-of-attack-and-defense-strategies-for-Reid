@@ -182,7 +182,7 @@ def sheet_init(sheet):
 
 def sheet_index_init(sheet_index):
     for row in range (3,4+4*len(Attack_algorithm_library)):
-        for col in range (2,6):
+        for col in range (2,7):
             sheet_index.column_dimensions[get_column_letter(col)].width = 20
             sheet_index.row_dimensions[row].height = 40
 
@@ -269,7 +269,8 @@ def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sa
     sheet_init(sheet)
     sheet_index_init(sheet_index)
 
-    save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
+    if cfg.ATTACKMETHOD !="":
+        save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
 
     if pure_result!=None:
         CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet_index)
@@ -566,6 +567,7 @@ def easylog(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SS
 
     file.write('Configuration:\n')
     file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}\n")
+    file.write(f"     type   : {cfg.CFGTYPE}\n")
     file.write(f"     attack : {cfg.ATTACKMETHOD!=None}\n")
     if cfg.ATTACKMETHOD!=None:
         file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
@@ -577,7 +579,7 @@ def easylog(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SS
         file.write(f"            defense method    = {cfg.DEFENSEMETHOD}\n"  )
     for name,result in {'pure_result':pure_result,'att_result':att_result,'def_result':def_result,'def_adv_result':def_adv_result}.items():
         mAP = result['mAP'] if result!=None else ""
-        file.write(f'mAP of {name}: {mAP}\n')
+        file.write(f'{name.ljust(15)} : {mAP}\n')
     file.write(f'SSIM = {SSIM if SSIM!=None else ""}\n')  
     file.write(f'def-SSIM = {def_SSIM if def_SSIM!=None else ""}\n')    
     file.write('\n---------------------------------end-log---------------------------------\n\n\n')
