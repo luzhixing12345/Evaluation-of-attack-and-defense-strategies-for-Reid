@@ -28,9 +28,9 @@ class adversary_defense:
         self.SSAE_generator = None
         self.MISR_generator = None
         if self.cfg.ATTACKMETHOD == 'SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.cfg.ATTACKPRETRAINED)
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=True)
         elif self.cfg.ATTACKMETHOD == 'MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=self.cfg.ATTACKPRETRAINED)
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=True)
 
 
     def get_defense_result(self):

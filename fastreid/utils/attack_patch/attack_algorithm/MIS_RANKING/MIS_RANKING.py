@@ -41,7 +41,7 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
   model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
-  #model.RESIZE = True
+  model.RESIZE = True
   Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
   model.to(device)
 
@@ -100,8 +100,8 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
   for batch_idx, data in enumerate(trainloader):
     if batch_idx>5000:
       break
-    #imgs = (data['images']/255).cuda()
-    imgs = data['images'].cuda()
+    imgs = (data['images']/255).cuda()
+    #imgs = data['images'].cuda()
     pids = data['targets'].cuda()
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
 
@@ -110,8 +110,8 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
       print(f'ssim = {ssim}')
       SSIM.append(ssim)
 
-    new_imgs = new_imgs.cuda()
-    mask = mask.cuda()
+    new_imgs = new_imgs.to(device)
+    mask = mask.to(device)
     # Fake Detection and Loss
     pred_fake_pool, _ = D(torch.cat((imgs, new_imgs.detach()), 1))
     loss_D_fake = criterionGAN(pred_fake_pool, False)        
@@ -127,7 +127,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     
     # Re-ID advloss
     model.heads.MODE = 'FC'
-    output = model(make_dict(new_imgs,targets))
+    output = model(make_dict(new_imgs,pids))
 
     new_outputs = output['cls_outputs']
     new_features = output['features']
@@ -153,7 +153,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     ############## Backward #############
     # update generator weights
     optimizer_G.zero_grad()
-    # loss_G.backward(retain_graph=True)
+    #loss_G.backward(retain_graph=True)
     loss_G.backward()
     optimizer_G.step()
 
