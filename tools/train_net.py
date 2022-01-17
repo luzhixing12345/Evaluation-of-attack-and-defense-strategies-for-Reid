@@ -13,7 +13,7 @@ from fastreid.engine import (DefaultTrainer, default_argument_parser,
 from fastreid.utils.attack_patch.attack_process import attack
 from fastreid.utils.defense_patch.defense_process import defense
 from fastreid.utils.reid_patch import (
-                                       analyze_configCondition, get_result, move_model_pos, print_info,
+                                       analyze_configCondition, easylog, get_result, move_model_pos, print_info,
                                        record)
 
 
@@ -92,11 +92,12 @@ def main(args):
         record(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SSIM)
         print_info('the results were recorded in the excel in the root path')
     
+    easylog(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SSIM)
     # if args.log: #default True
     #     record_order(cfg,pure_result_to_save,att_result_to_save,def_result_to_save,def_adv_result_to_save,save_pic = args.save_pic)
     
 
-    print_info("You have finished all the jobs !")
+    print_info("You have finished!")
 
 
 

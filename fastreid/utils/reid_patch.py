@@ -139,8 +139,7 @@ def classify_test_set(cfg,data_loader):
     # model was saved in ./model/test_trained.pth
     # cfg.TESTSET_TRAINED_WEIGHT
     print('the model was saved in ./model/test_trained.pth')
-
-    
+  
 def get_result(cfg,model_path,step:str)->dict:
     model =DefaultTrainer.build_model(cfg)  # 启用baseline,用于测评
     Checkpointer(model).load(model_path)
@@ -409,9 +408,6 @@ def record_order(cfg,pure_result,att_result,def_result,def_adv_result, pictureNu
     path = f"{os.getcwd()}/logs_pic/{cfg.DATASETS.NAMES[0]}/{cfg.ATTACKTYPE}{cfg.ATTACKDIRECTION}/{cfg.ATTACKMETHOD}_{cfg.DEFENSEMETHOD}"
     mkdir(path)
 
-    log(cfg,q_pid_save,g_pids_save,pictureNumber)
-    
-    
     # start to save pictures
 
     # save method 1
@@ -477,31 +473,6 @@ def record_order(cfg,pure_result,att_result,def_result,def_adv_result, pictureNu
     else :
         print('You choose not to save pictures')
 
-def log(cfg):
-    path = f"{os.getcwd()}/logs_pic"
-
-    file = open(path+"/log.txt",'a')# write from the end of the txt,so it will record all your jobs
-    file.write('---------------------------------start-log---------------------------------\n')
-    time_info = time.asctime( time.localtime(time.time()))
-    file.write("the log time is "+time_info+"\n\n") 
-
-    file.write('Configuration:\n')
-    file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}\n")
-    file.write(f"     attack : {cfg.ATTACKMETHOD!=None}\n")
-    if cfg.ATTACKMETHOD!=None:
-        file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
-        file.write(f"            attack  type      = {cfg.ATTACKTYPE}\n")
-        file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
-        file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
-    file.write(f"     defense: {cfg.DEFENSEMETHOD!=None} \n")
-    if cfg.DEFENSEMETHOD!=None:
-        file.write(f"            defense method    = {cfg.DEFENSEMETHOD}\n"  )
-    
-    file.write('\n---------------------------------end-log---------------------------------\n')
-    file.write('|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n')
-    file.close()
-    print("log over")
-
 def print_info(str):
     print('---------------------------------------------------------')
     print('---------------------------------------------------------')
@@ -543,7 +514,7 @@ def analyze_configCondition(args,cfg):
             cfg.DEFENSEPRETRAINED = True
         else:
             raise ValueError(f'too many :, please check usage in USE.md')
-        cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
+
 
     print('---------------------------------------------------------')
     print('---------------------------------------------------------')
@@ -577,7 +548,7 @@ def move_model_pos(cfg):
     # ./configs/DukeMTMC/bagtricks_R50.yml
     if not os.path.exists('model'):
         os.makedirs('./model')
-    origin_pos = f'{cfg.OUTPUT_DIR}/model.best.pth'
+    origin_pos = f'{cfg.OUTPUT_DIR}/model_final.pth'
     target_pos = f'./model/{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth'
     shutil.move(origin_pos,target_pos)
     print(f'already move {origin_pos} to {target_pos}')
@@ -585,5 +556,32 @@ def move_model_pos(cfg):
 def make_dict(images,targets):
     dict = {'images':images,'targets':targets}
     return dict
+
+def easylog(cfg, pure_result, att_result, def_result, def_adv_result,SSIM,def_SSIM,log_pos = './log.txt'):
+    print('start log in log.txt')
+    file = open(log_pos,'a')# write from the end of the txt,so it will record all your jobs
+    file.write('---------------------------------start-log---------------------------------\n')
+    time_info = time.asctime( time.localtime(time.time()))
+    file.write("the log time is "+time_info+"\n\n") 
+
+    file.write('Configuration:\n')
+    file.write(f"     dataset: {cfg.DATASETS.NAMES[0]}\n")
+    file.write(f"     attack : {cfg.ATTACKMETHOD!=None}\n")
+    if cfg.ATTACKMETHOD!=None:
+        file.write(f"            attack  method    = {cfg.ATTACKMETHOD}\n")
+        file.write(f"            attack  type      = {cfg.ATTACKTYPE}\n")
+        file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
+        file.write(f"            attack  direction = {cfg.ATTACKDIRECTION}\n")
+    file.write(f"     defense: {cfg.DEFENSEMETHOD!=None} \n")
+    if cfg.DEFENSEMETHOD!=None:
+        file.write(f"            defense method    = {cfg.DEFENSEMETHOD}\n"  )
+    for name,result in {'pure_result':pure_result,'att_result':att_result,'def_result':def_result,'def_adv_result':def_adv_result}.items():
+        mAP = result['mAP'] if result!=None else ""
+        file.write(f'mAP of {name}: {mAP}\n')
+    file.write(f'SSIM = {SSIM if SSIM!=None else ""}\n')  
+    file.write(f'def-SSIM = {def_SSIM if def_SSIM!=None else ""}\n')    
+    file.write('\n---------------------------------end-log---------------------------------\n\n\n')
+    file.close()
+    print("log over")
 
 

@@ -10,6 +10,7 @@ from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.advertorch.attacks import PGDAttack
 from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set, pairwise_distance
 import numpy as np
+import time
 
 device='cuda'
 
@@ -24,10 +25,17 @@ def GOAT(cfg,train_data_loader):
     model.to(device)
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
-    max_epoch = 500
+
+
+    max_epoch = 500 
     request_dict = defaultdict(list)
+    # This max_epoch is smaller than others, that's because `request_dict` is used to restore images
+    # if too large it will maximun capacity exceeded
+
+
     criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     EPOCH = 5
+    frequency = 20
 
     for id,data in enumerate(train_data_loader):
         if id>max_epoch:
@@ -39,6 +47,8 @@ def GOAT(cfg,train_data_loader):
   
     for epoch in range(EPOCH):
         loss_total = 0
+        print(f'start training for epoch {epoch} of {EPOCH}')
+        time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
         for index, data in enumerate(train_data_loader):
             if index>max_epoch:
                 break
@@ -46,7 +56,7 @@ def GOAT(cfg,train_data_loader):
             labels = data['targets'].to(device)       
                 
             adv_images = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
-            if index%20==0:
+            if index % frequency ==0:
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
             model.train()
@@ -61,7 +71,9 @@ def GOAT(cfg,train_data_loader):
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
-        print(f'total_loss = {loss_total} in epoch {epoch}')
+        time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+        print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
+
     print('finished GOAT_training !')
     Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE} model !')

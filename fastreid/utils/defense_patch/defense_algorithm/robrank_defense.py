@@ -7,8 +7,9 @@ import torch
 import numpy as np
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
+from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set, make_dict
 from .robrank import *
+import time
 margin_cosine: float = 0.2
 margin_euclidean: float = 1.0
 device = 'cuda'
@@ -47,6 +48,8 @@ def RobRank_defense(cfg,train_set,str):
     for epoch in range(EPOCH):
         model.train()
         loss_total = 0
+        print(f'start training for epoch {epoch} of {EPOCH}')
+        time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
         for id,data in enumerate(train_set):
             if id>max_id:
                 break
@@ -62,7 +65,8 @@ def RobRank_defense(cfg,train_set,str):
             loss.backward()
             optimizer.step()
         #eval_train(model,train_set,max_id=500)
-        print(f'loss_total = {loss_total} in epoch {epoch}')
+        time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+        print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
     
     print(f'finished {str}_training !')
     Checkpointer(model,'model').save(f'{str}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')

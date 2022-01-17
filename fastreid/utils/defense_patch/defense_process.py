@@ -15,6 +15,7 @@ class defense:
         self.initalization()
         self.UseAttack = self.cfg.ATTACKTYPE!=''
         self.pretrained = self.cfg.DEFENSEPRETRAINED
+        
 
     def initalization(self):
         dict = {
@@ -25,7 +26,11 @@ class defense:
             'PNP':robrank_defense,
         }
         self.DefenseProcess = dict[self.cfg.DEFENSEMETHOD](self.cfg)
-
+        if self.cfg.DEFENSEMETHOD == 'ADV':
+            self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'{self.cfg.DEFENSEMETHOD}_{self.cfg.ATTACKMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}'
+        else:
+            self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{self.cfg.DEFENSEMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}.pth'
+    
     def start_defense(self):
         if self.pretrained:
             print('Use the pretrained defense model')

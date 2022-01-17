@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import change_preprocess_image, eval_train, get_result, get_train_set
+from fastreid.utils.reid_patch import eval_train, get_result, get_train_set
 device='cuda'
 
 

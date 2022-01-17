@@ -1,5 +1,4 @@
-
-import torch
+import time
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
@@ -45,12 +44,17 @@ class adversary_defense:
 
         EPOCH = 3
         max_id = 4000
-        alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data 
+        alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
+        frequency = 800 
 
         self.model.train()
         self.model.heads.MODE = 'C'
+
+
         for epoch in range(EPOCH):
             loss_total = 0
+            print(f'start training for epoch {epoch} of {EPOCH}')
+            time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
             for id,data in enumerate(self.train_set):
                 if id>max_id:
                     break
@@ -62,8 +66,8 @@ class adversary_defense:
                 else:
                     adv_images = attack_method(images,target)
 
-                # if id%200==0:
-                #     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
+                if id % frequency==0:
+                    print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
                 optimizer.zero_grad()
 
                 logits_clean = self.model(images)
@@ -73,7 +77,8 @@ class adversary_defense:
                 loss_total+=loss.item()
                 loss.backward()
                 optimizer.step()
-            print('total_loss = ',loss_total,epoch)
+            time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+            print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
             
         print('finished adv_training !')
