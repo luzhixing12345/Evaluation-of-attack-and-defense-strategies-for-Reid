@@ -1,5 +1,6 @@
 import time
 import torch.nn as nn
+import copy
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set
@@ -27,10 +28,14 @@ class adversary_defense:
 
         self.SSAE_generator = None
         self.MISR_generator = None
+
+        temp_cfg = copy.deepcopy(self.cfg)
+        temp_cfg.ATTACKTYPE = 'QA'
+
         if self.cfg.ATTACKMETHOD == 'SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=True)
+            self.SSAE_generator = make_SSAE_generator(temp_cfg,self.model,pretrained=True)
         elif self.cfg.ATTACKMETHOD == 'MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=True)
+            self.MISR_generator = make_MIS_Ranking_generator(temp_cfg,pretrained=True)
 
 
     def get_defense_result(self):
@@ -98,14 +103,15 @@ class adversary_defense:
         self.target = False
         self.model.heads.MODE = 'C'
 
+
         dict = {
-            'FGSM'    :FGSM  (self.cfg,self.model, loss_fn, eps=eps, targeted=self.target),
-            'IFGSM'   :IFGSM (self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-            'ODFA'    :ODFA  (self.cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
+            'FGSM'    :FGSM  (temp_cfg,self.model, loss_fn, eps=eps, targeted=self.target),
+            'IFGSM'   :IFGSM (temp_cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'MIFGSM'  :MIFGSM(temp_cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'ODFA'    :ODFA  (temp_cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.cfg,self.model)
+            'MUAP'    :MUAP(temp_cfg,self.model)
         }
         return dict[self.cfg.ATTACKMETHOD]
 
