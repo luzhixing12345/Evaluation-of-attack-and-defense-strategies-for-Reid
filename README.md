@@ -38,6 +38,7 @@ conda install pytorch==1.6.0 torchvision tensorboard -c pytorch
 pip install -r docs/requirements.txt
 conda install Cython
 conda install yaml
+conda install scikit-image=0.15.0
 conda install -c conda-forge tensorboardx
 ```
 
