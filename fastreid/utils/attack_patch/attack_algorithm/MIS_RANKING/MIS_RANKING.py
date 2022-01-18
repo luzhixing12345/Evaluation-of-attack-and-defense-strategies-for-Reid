@@ -47,14 +47,14 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   check_freezen(model, need_modified=True, after_modified=False)
 
-  G = Generator(3, 3, 32, norm='bn').apply(weights_init)
-  #G = ResnetG(3,3,32).apply(weights_init)
+  #G = Generator(3, 3, 32, norm='bn').apply(weights_init)
+  G = ResnetG(3,3,32).apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
   #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
   check_freezen(D, need_modified=True, after_modified=True)
-  optimizer_G = optim.Adam(G.parameters(), lr=0.0002, betas=(0.5, 0.999))
-  optimizer_D = optim.Adam(D.parameters(), lr=0.0002, betas=(0.5, 0.999))
+  optimizer_G = optim.Adam(G.parameters(), lr=0.002, betas=(0.5, 0.999))
+  optimizer_D = optim.Adam(D.parameters(), lr=0.002, betas=(0.5, 0.999))
 
   model.to(device)
   G.to(device)
@@ -127,7 +127,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     
     # Re-ID advloss
     model.heads.MODE = 'FC'
-    output = model(make_dict(new_imgs,pids))
+    output = model(new_imgs)
 
     new_outputs = output['cls_outputs']
     new_features = output['features']
@@ -135,17 +135,15 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     xent_loss, global_loss, loss_G_ssim = 0, 0, 0
     targets = None
 
-    if ak_type < 0:
-      xent_loss = DeepSupervision(clf_criterion, new_outputs, pids) if isinstance(new_features, (tuple, list)) else clf_criterion(new_outputs, pids)
-
+    xent_loss = DeepSupervision(clf_criterion, new_outputs, pids) if isinstance(new_features, (tuple, list)) else clf_criterion(new_outputs, pids)
 
     global_loss = DeepSupervision(metric_criterion, new_features, pids, targets) if isinstance(new_features, (tuple, list)) else metric_criterion(new_features, pids, targets)
     
     loss_G_ReID = (xent_loss+ global_loss)*10
 
-    from .util.ms_ssim import msssim
-    loss_func = msssim
-    loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
+    # from .util.ms_ssim import msssim
+    # loss_func = msssim
+    # loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
 
     ############## Forward ###############
     loss_D = (loss_D_fake + loss_D_real)/2

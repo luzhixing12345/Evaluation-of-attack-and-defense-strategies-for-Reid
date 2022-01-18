@@ -116,9 +116,9 @@ class Baseline_train(nn.Module):
         Normalize and batch the input images.
         """
         if isinstance(batched_inputs, dict):
-            images = batched_inputs['images']
+            images = batched_inputs['images'].to(self.device)
         elif isinstance(batched_inputs, torch.Tensor):
-            images = batched_inputs
+            images = batched_inputs.to(self.device)
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
 
@@ -130,9 +130,9 @@ class Baseline_train(nn.Module):
         Normalize and batch the input images.
         """
         if isinstance(batched_inputs, dict):
-            images = batched_inputs['images']
+            images = batched_inputs['images'].to(self.device)
         elif isinstance(batched_inputs, torch.Tensor):
-            images = batched_inputs
+            images = batched_inputs.to(self.device)
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
 

@@ -272,7 +272,7 @@ def record(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sa
     if cfg.ATTACKMETHOD !="":
         save_data(cfg,pure_result,att_result,def_result,def_adv_result,sheet)
 
-    if pure_result!=None:
+    if pure_result!=None and cfg.ATTACKMETHOD!="":
         CalculateIndex(cfg,pure_result,att_result,def_result,def_adv_result,SSIM,def_SSIM,sheet_index)
 
     #save_config(cfg,pure_result,adv_result,def_adv_result,sheet)
