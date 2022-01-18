@@ -101,7 +101,7 @@ def est_training_step(model, images, labels,id):
         print('ssim = ',eval_ssim(images,advimgs))
                 
     model.heads.MODE = 'FC'
-    outputs = model(make_dict(advimgs,labels))
+    outputs = model(advimgs)
 
     loss_dict = model.losses(outputs,labels)
     loss = sum(loss_dict.values())
@@ -211,8 +211,8 @@ def ACT_training_step(model: torch.nn.Module, images,labels,id):
     # Adversarial Training
     model.train()
     model.heads.MODE = 'C'
-    pnemb = model(make_dict(images_pnp,labels))
-    aemb = model(make_dict(images[anc, :, :, :],labels))
+    pnemb = model(images_pnp)
+    aemb = model(images[anc, :, :, :])
     pnemb = F.normalize(pnemb)
     aemb = F.normalize(aemb)
     # compute adversarial loss
@@ -246,7 +246,7 @@ def ses_training_step(model, images,labels,id):
         print(f'ssim = {eval_ssim(images,advimgs)}')
     # evaluate advtrain loss
     model.heads.MODE ='FC'
-    output_orig = model(make_dict(advimgs,labels))
+    output_orig = model(advimgs)
     loss_orig = model.losses(output_orig, labels)
     model.heads.MODE = 'F'
     output_adv = model(advimgs)
