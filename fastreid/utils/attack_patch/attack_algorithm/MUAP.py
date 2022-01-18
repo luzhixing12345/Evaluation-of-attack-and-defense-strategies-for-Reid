@@ -105,8 +105,8 @@ class MUAP:
     def GA(self,images,target):
 
 
-        size,N,_,_,_ = images.shape
-        attack_img = Variable(torch.rand(size,3, 256, 128), requires_grad=True)*1e-6
+        _,N,_,_,_ = images.shape
+        attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
         attack_img = attack_img.to(device)
         attack_img = attack_img.detach()
         attack_img.requires_grad_()
