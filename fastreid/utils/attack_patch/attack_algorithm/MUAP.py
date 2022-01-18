@@ -112,7 +112,7 @@ class MUAP:
         attack_img.requires_grad_()
         new_images = []
         for i in range(N):
-            img = images[:,i,:,:,:]
+            img = images[:,i,:,:,:].to(device)
 
             for epoch in range(self.EPOCH):
                 attack_img = Variable(attack_img, requires_grad=True)
