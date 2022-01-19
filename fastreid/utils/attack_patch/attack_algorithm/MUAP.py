@@ -8,10 +8,10 @@ device = 'cuda'
 
 
 def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=10):
+    att_img = att_img.cpu()
+    grad = grad.cpu()
 
-    constant_tensor = torch.tensor([[[1e-12]], [[1e-12]], [[1e-12]]])
-    constant_tensor = constant_tensor.to(device)
-    norm = torch.sum(torch.abs(grad).view((grad.shape[0], -1)), dim=1).view(-1, 1, 1) + constant_tensor
+    norm = torch.sum(torch.abs(grad).view((grad.shape[0], -1)), dim=1).view(-1, 1, 1) + torch.tensor([[[1e-12]], [[1e-12]], [[1e-12]]])
     # norm = torch.max(torch.abs(grad).flatten())
     x_grad = grad / norm
     if torch.isnan(x_grad).any() or torch.isnan(g).any():
@@ -37,7 +37,7 @@ def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=1
     sat = torch.div(torch.sum(torch.eq(torch.abs(att_img), radiu), dtype=torch.float32),
                 torch.tensor(att_img.flatten().size(), dtype=torch.float32))
 
-
+    att_img = att_img.to(device)
     return att_img, sat, g
 
 
@@ -108,21 +108,24 @@ class MUAP:
 
 
         _,N,_,_,_ = images.shape
-        attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
-        attack_img = attack_img.to(device)
-        attack_img = attack_img.detach()
-        attack_img.requires_grad_()
+
         new_images = []
         for i in range(N):
             img = images[:,i,:,:,:].to(device)
-
+            attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+            attack_img = attack_img.to(device)
+            
+            loss = 0
             for epoch in range(self.EPOCH):
+                attack_img = self.normalize_transform(attack_img)
+                attack_img = attack_img.detach()
+                attack_img.requires_grad_()
+
                 attack_img = Variable(attack_img, requires_grad=True)
-                median_img = torch.add(img,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
-                
-                with torch.no_grad():
-                    feat = self.model(img)
-                    attack_feat = self.model(median_img)
+                median_img = torch.add(img,attack_img.to(device)).to(device)   #mix attack img and clean img
+
+                feat = self.model(img)
+                attack_feat = self.model(median_img)
             
                 map_loss = self.loss_fn1(attack_feat, feat, target, 5)
                 tvl_loss = self.loss_fn2(median_img)
@@ -135,7 +138,15 @@ class MUAP:
                 attack_img, sat, self.g = attack_update(attack_img, attack_grad, self.pre_sat, self.g, self.scale_rate,epoch,self.radiu)
                 self.pre_sat = sat
 
-            new_images.append(img)
+                loss += total_loss
+                avg_loss = loss/(epoch+1)
+
+                if avg_loss < self.pre_loss:
+                    best_attack = attack_img
+                    self.pre_loss = avg_loss
+
+            image = torch.add(img,best_attack.to(device))
+            new_images.append(image)
         
         new_images = torch.stack(new_images)
         new_images = new_images.permute(1,0,2,3,4)
@@ -156,7 +167,7 @@ def euclidean_dist(x, y, square=False):
     xx = torch.pow(x, 2).sum(1, keepdim=True).expand(m, n)
     yy = torch.pow(y, 2).sum(1, keepdim=True).expand(n, m).t()
     dist = xx + yy
-    dist.addmm_(1, -2, x, y.t())
+    dist.addmm_(x, y.t(),beta=1,alpha=-2)
     if square:
         dist = dist.clamp(min=1e-12)
     else:
