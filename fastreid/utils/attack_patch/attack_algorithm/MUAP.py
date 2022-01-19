@@ -9,7 +9,9 @@ device = 'cuda'
 
 def attack_update(att_img, grad, pre_sat, g, rate=0.8, base=False, i=10, radiu=10):
 
-    norm = torch.sum(torch.abs(grad).view((grad.shape[0], -1)), dim=1).view(-1, 1, 1) + torch.tensor([[[1e-12]], [[1e-12]], [[1e-12]]])
+    constant_tensor = torch.tensor([[[1e-12]], [[1e-12]], [[1e-12]]])
+    constant_tensor = constant_tensor.to(device)
+    norm = torch.sum(torch.abs(grad).view((grad.shape[0], -1)), dim=1).view(-1, 1, 1) + constant_tensor
     # norm = torch.max(torch.abs(grad).flatten())
     x_grad = grad / norm
     if torch.isnan(x_grad).any() or torch.isnan(g).any():

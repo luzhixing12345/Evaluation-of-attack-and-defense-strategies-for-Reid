@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.nn import Parameter
 from copy import deepcopy
 import torch.optim as optim
+import time
 
 from fastreid.utils.reid_patch import get_train_set
 device = 'cuda'
@@ -265,6 +266,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     cosine_loss = CosineLoss().to(device)
     optimizer = optim.Adam(generator.parameters(), lr=1e-4)
     mse_loss = nn.MSELoss(reduction='sum').to(device)
+    loss_total = 0
 
     EPOCHS = 20
     delta = 0.1
@@ -273,9 +275,9 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     if not pretrained:
         for epoch in range(EPOCHS):
 
-            print(f'start epoch {epoch} training for SSAE')
+            print(f'Train Step1:start epoch {epoch} training for SSAE')
             generator.train()
-
+            time_stamp_start = time.strftime("%H:%M:%S", time.localtime())
             for batch_idx, data in enumerate(train_loader):
             
                 if batch_idx>4000:
@@ -298,17 +300,21 @@ def make_SSAE_generator(cfg,model,pretrained=False):
 
                 angular_loss = cosine_loss(raw_feats, adv_feats)
                 loss = angular_loss
+                loss_total +=loss.item()
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+            time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+            print(f'total_loss for epoch {epoch} of {EPOCHS} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
         optimizer = optim.Adam(generator.parameters(), lr=1e-4)
+        loss_total = 0
         for epoch in range(EPOCHS):
 
-            print(f'start epoch {epoch} training for SSAE')
+            print(f'Train Step2:start epoch {epoch} training for SSAE')
             generator.train()
-
+            time_stamp_start = time.strftime("%H:%M:%S", time.localtime())
             for batch_idx, data in enumerate(train_loader):
             
                 if batch_idx>4000:
@@ -340,7 +346,8 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-
+            time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+            print(f'total_loss for epoch {epoch} of {EPOCHS} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
         torch.save(generator.state_dict(), save_pos)
         print(f'save model weights in {save_pos}')
