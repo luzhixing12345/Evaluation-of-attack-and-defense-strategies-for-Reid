@@ -111,6 +111,7 @@ class adversary_defense:
         eps=0.05
         eps_iter=1.0/255.0
 
+
         dict = {
             'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=False),
             'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),

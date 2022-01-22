@@ -147,7 +147,7 @@ class Baseline_train(nn.Module):
         """
         # model predictions
         # fmt: off
-        pred_class_logits = outputs['pred_class_logits'].detach()
+        pred_class_logits = outputs['pred_class_logits']
         cls_outputs       = outputs['cls_outputs']
         pred_features     = outputs['features']
         # fmt: on
