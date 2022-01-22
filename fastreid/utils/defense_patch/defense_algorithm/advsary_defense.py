@@ -58,9 +58,9 @@ class adversary_defense:
         self.model.train()
         self.model.heads.MODE = 'FC'
 
-
         for epoch in range(EPOCH):
             loss_total = 0
+            self.model.heads.MODE = 'FC'
             print(f'start training for epoch {epoch} of {EPOCH}')
             time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
             for id,data in enumerate(self.train_set):
@@ -110,8 +110,6 @@ class adversary_defense:
 
         eps=0.05
         eps_iter=1.0/255.0
-
-
         dict = {
             'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=False),
             'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),

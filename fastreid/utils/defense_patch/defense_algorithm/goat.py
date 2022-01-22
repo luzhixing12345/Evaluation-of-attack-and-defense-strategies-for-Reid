@@ -70,7 +70,7 @@ def GOAT(cfg,train_data_loader):
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
-            
+        eval_train(model,train_data_loader)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
