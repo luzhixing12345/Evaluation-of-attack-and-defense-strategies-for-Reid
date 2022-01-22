@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from torch.autograd import Variable
+from torch.autograd import Variable, variable
 import numpy as np
 device = 'cuda'
 
@@ -67,16 +67,14 @@ class MUAP:
         
         images = images.to(device)
         attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
-        attack_img.to(device)
-        
+
         loss = 0
         for epoch in range(self.EPOCH):
+            attack_img = attack_img.clone().detach_().to(device)
+            attack_img.requires_grad_()
             
-            normed_atta_img = self.normalize_transform(attack_img)
-            normed_atta_img = normed_atta_img.to(device)
-
+            normed_atta_img = self.normalize_transform(attack_img).to(device)
             median_img = torch.add(images,normed_atta_img).to(device)   #mix attack img and clean img
-            
             
             feat = self.model(images)
             attack_feat = self.model(median_img)
@@ -113,10 +111,11 @@ class MUAP:
             self.pre_loss = np.inf
             img = images[:,i,:,:,:].to(device)
             attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
-            attack_img = attack_img.to(device)
-            
             loss = 0
             for epoch in range(self.EPOCH):
+                attack_img = attack_img.clone().detach_().to(device)
+                attack_img.requires_grad_()
+                
                 normed_atta_img = self.normalize_transform(attack_img)
                 normed_atta_img = normed_atta_img.to(device)
 

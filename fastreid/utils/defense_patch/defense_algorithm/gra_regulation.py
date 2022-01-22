@@ -78,6 +78,7 @@ class InputGradReg(object):
         # loss只能为标量，但若loss输入为向量的情况，grad_outputs内部和其点乘求和，在对x的每个分量分别求导数
         # 知乎：https://zhuanlan.zhihu.com/p/83172023
         # 简单地理解成在求梯度时的权重
+        x = x*255
         x_grad = autograd.grad(loss, x, grad_outputs=grad_outputs, retain_graph=True, create_graph=True)[0]
 
         if self.norm == "L1":

@@ -106,17 +106,16 @@ class adversary_defense:
         #mse = nn.MSELoss(reduction='sum')
         loss_fn = nn.CrossEntropyLoss(reduction="sum")
         def odfa(f1,f2):
-            return loss_fn(f1,-f2)
+            return loss_fn(-f1,f2)
 
         eps=0.05
         eps_iter=1.0/255.0
-        self.target = False
 
         dict = {
-            'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=self.target),
-            'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-            'ODFA'    :ODFA  (self.temp_cfg,self.temp_model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
+            'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=False),
+            'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,decay_factor=1),
+            'ODFA'    :ODFA  (self.temp_cfg,self.temp_model, odfa,eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
             'MUAP'    :MUAP(self.temp_cfg,self.temp_model)
