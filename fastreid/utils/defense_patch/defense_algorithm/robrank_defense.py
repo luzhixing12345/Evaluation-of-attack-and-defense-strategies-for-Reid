@@ -2,12 +2,13 @@
 
 
 import functools as ft
+import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import numpy as np
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set, make_dict
+from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
 from .robrank import *
 import time
 margin_cosine: float = 0.2
@@ -27,10 +28,10 @@ class robrank_defense:
 
 def RobRank_defense(cfg,train_set,str):
     if str =='SES':
-        train_step = ses_training_step
+        train_step = SES_training_step
     elif str == 'EST':
-        train_step = est_training_step
-    elif str == 'PNP':
+        train_step = EST_training_step
+    elif str == 'ACT':
         train_step = ACT_training_step
     else:
         raise KeyError
@@ -41,10 +42,9 @@ def RobRank_defense(cfg,train_set,str):
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
-    max_id =4000
-    EPOCH = 3
-    #eval_train(model,train_set,max_id=500)
-    
+    max_id = 4000
+    EPOCH = 1
+ 
     for epoch in range(EPOCH):
         model.train()
         loss_total = 0
@@ -64,7 +64,7 @@ def RobRank_defense(cfg,train_set,str):
             loss_total+=loss
             loss.backward()
             optimizer.step()
-        #eval_train(model,train_set,max_id=500)
+        eval_train(model,train_set)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
     
@@ -72,7 +72,7 @@ def RobRank_defense(cfg,train_set,str):
     Checkpointer(model,'model').save(f'{str}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {str}_trained model !')
 
-def est_training_step(model, images, labels,id):
+def EST_training_step(model, images, labels,id):
     '''
     Do adversarial training using Mo's defensive triplet (2002.11293 / ECCV'20)
     Embedding-Shifted Triplet (EST)
@@ -88,40 +88,25 @@ def est_training_step(model, images, labels,id):
     # generate adversarial examples
     #advatk_metric = 'C' if model.dataset in ('mnist', 'fashion') else 'C'
     model.heads.MODE = 'F'
+    # with torch.no_grad():
+    #     output_orig = model(images)
     advrank = AdvRank(model, eps=4. / 255.,
                       alpha=1. / 255.,
                       pgditer=24,
                       device = 'cuda',
                       metric='N', verbose=False)
     # set shape
-
-    # generate adv examples
+    model.eval()
     advimgs = advrank.embShift(images)
-    if id%800==0:
-        print('ssim = ',eval_ssim(images,advimgs))
-                
+    if id % 800 == 0:
+        print(f'ssim = {eval_ssim(images,advimgs)}')
+    
+    model.train()
     model.heads.MODE = 'FC'
-    outputs = model(advimgs)
-
-    loss_dict = model.losses(outputs,labels)
+    output = model(advimgs)
+    loss_dict = model.losses(output,labels)
     loss = sum(loss_dict.values())
-
     return loss
-
-# def svd(output,constraints: list = [6, 7]):
-#     Constraints = {
-#     1: lambda svd: (svd.S.max() - 1e+3).relu(),
-#     2: lambda svd: (svd.S[0] / svd.S[1] - 8.0).relu(),
-#     3: lambda svd: (1.2 - svd.S[1:5] / svd.S[2:6]).relu().mean(),
-#     4: lambda svd: (1e-3 / svd.S.min() - 1.0).relu(),
-#     5: lambda svd: torch.exp(svd.S.max() / (8192 * svd.S.min()) - 1),
-#     6: lambda svd: torch.log(svd.S.max() / 2e+2).relu(),
-#     7: lambda svd: torch.log(1e-5 / svd.S.min()).relu(),
-#     8: lambda svd: torch.log(svd.S.max() / (1e5 * svd.S.min())).relu()
-#     }
-#     svd = torch.svd(output)
-#     penalties = [Constraints[i](svd) for i in constraints]
-#     return ft.reduce(op.add, penalties) if penalties else 0.0
 
 def mmt_training_step(model: torch.nn.Module, images,labels,id):
     '''
@@ -197,20 +182,19 @@ def ACT_training_step(model: torch.nn.Module, images,labels,id):
     loss_fun = ptriplet()
     triplets = miner(output_orig, labels, method=loss_fun._minermethod,
                      metric=loss_fun._metric,
-                     margin=margin_euclidean if loss_fun._metric in ('E', 'N')
-                     else margin_cosine)
+                     margin=margin_euclidean)
     anc, pos, neg = triplets
     pnp = PositiveNegativePerplexing(model, eps=4. / 255.,
                                     alpha=1. / 255.,
-                                    pgditer=24,
+                                    pgditer=1,
                                     device = 'cuda',
                                     metric='N', verbose=False)
     # Collapsing positive and negative -- Anti-Collapse Triplet (ACT) defense.
+    model.eval()
     images_pnp = pnp.pncollapse(images, triplets)
 
     # Adversarial Training
     model.train()
-    model.heads.MODE = 'C'
     pnemb = model(images_pnp)
     aemb = model(images[anc, :, :, :])
     pnemb = F.normalize(pnemb)
@@ -221,7 +205,7 @@ def ACT_training_step(model: torch.nn.Module, images,labels,id):
 
     return loss
 
-def ses_training_step(model, images,labels,id):
+def SES_training_step(model, images,labels,id):
     '''
     Adversarial training by directly supressing embedding shift (SES)
     max(*.es)->advimg, min(advimg->emb,oriimg->img;*.metric)
@@ -240,24 +224,22 @@ def ses_training_step(model, images,labels,id):
                       pgditer=24,
                       device = 'cuda',
                       metric='N', verbose=False)
+    model.eval()
     advimgs = advrank.embShift(images)
-
-    if id % 800 ==0:
-        print(f'ssim = {eval_ssim(images,advimgs)}')
+    model.train()
     # evaluate advtrain loss
-    model.heads.MODE ='FC'
-    output_orig = model(advimgs)
-    loss_orig = model.losses(output_orig, labels)
-    model.heads.MODE = 'F'
     output_adv = model(advimgs)
-    # select defense method
-    output_orig = output_orig['features']
-    nori = F.normalize(output_orig)
+    model.heads.MODE = 'FC'
+    output_orig = model(images)
+    loss_orig = model.losses(output_orig, labels)
+    loss_orig = sum(loss_orig.values())
+    
+    nori = F.normalize(output_orig['features'])
     nadv = F.normalize(output_adv)
     embshift = F.pairwise_distance(nadv, nori)
     # loss and log
     # method 1: loss_triplet + loss_embshift
-    loss = sum(loss_orig.values()) + 1.0 * embshift.mean()
+    loss = loss_orig + 1.0 * embshift.mean()
     # method 2: loss_triplet + loss_embshiftp2
     #loss = loss_orig + 1.0 * (embshift ** 2).mean()
 

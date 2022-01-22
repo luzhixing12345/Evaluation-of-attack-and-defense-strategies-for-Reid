@@ -13,7 +13,7 @@ from fastreid.engine import (DefaultTrainer, default_argument_parser,
 from fastreid.utils.attack_patch.attack_process import attack
 from fastreid.utils.defense_patch.defense_process import defense
 from fastreid.utils.reid_patch import (
-                                       analyze_configCondition, easylog, get_result, move_model_pos, print_info,
+                                       analyze_configCondition, easylog, get_result, get_train_set, move_model_pos, print_info,
                                        record)
 
 
@@ -70,7 +70,7 @@ def main(args):
     # market1501  pic    target                  DukeMTMC   pic     target
     # query      3368    750                     query      2228    702
     # gallery   15913    751                     gallery    17661   1110
-    #                                            train      16522   702
+    # train     12936                            train      16522   702
     
     if not cfg.ONLYDEFENSE:
         pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')

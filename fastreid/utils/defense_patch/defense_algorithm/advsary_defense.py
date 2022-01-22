@@ -3,7 +3,7 @@ import torch.nn as nn
 import copy
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set
+from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
 from fastreid.utils.attack_patch.attack_algorithm import *
 device='cuda'
  
@@ -31,9 +31,12 @@ class adversary_defense:
 
         self.temp_cfg = copy.deepcopy(self.cfg)
         self.temp_cfg.ATTACKTYPE = 'QA'
+        
+        self.temp_model = copy.deepcopy(self.model)
+        self.temp_model.heads.MODE = 'C'
 
         if self.cfg.ATTACKMETHOD == 'SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.temp_cfg,self.model,pretrained=True)
+            self.SSAE_generator = make_SSAE_generator(self.temp_cfg,self.temp_model,pretrained=True)
         elif self.cfg.ATTACKMETHOD == 'MISR':
             self.MISR_generator = make_MIS_Ranking_generator(self.temp_cfg,pretrained=True)
 
@@ -45,7 +48,7 @@ class adversary_defense:
         attack_method = self.getAttackMethod()
 
         optimizer = DefaultTrainer.build_optimizer(self.cfg, self.model)
-        loss_fun = nn.CrossEntropyLoss()
+        #loss_fun = nn.CrossEntropyLoss()
 
         EPOCH = 3
         max_id = 4000
@@ -53,7 +56,7 @@ class adversary_defense:
         frequency = 800 
 
         self.model.train()
-        self.model.heads.MODE = 'C'
+        self.model.heads.MODE = 'FC'
 
 
         for epoch in range(EPOCH):
@@ -75,13 +78,20 @@ class adversary_defense:
                     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
                 optimizer.zero_grad()
 
-                logits_clean = self.model(images)
-                logits_att = self.model(adv_images)
+                output_clean = self.model(make_dict(images,target))
+                output_dirty = self.model(make_dict(adv_images,target))
+                
+                loss_clean_dict = self.model.losses(output_clean,target)
+                loss_dirty_dict = self.model.losses(output_dirty,target)
+                
+                loss_clean = sum(loss_clean_dict.values())
+                loss_dirty = sum(loss_dirty_dict.values())
 
-                loss = loss_fun(logits_clean,target)*alpha+loss_fun(logits_att,target)*(1-alpha)
+                loss = loss_clean*alpha+loss_dirty*(1-alpha)
                 loss_total+=loss.item()
                 loss.backward()
                 optimizer.step()
+            eval_train(self.model,self.train_set)
             time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
             print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
@@ -101,17 +111,15 @@ class adversary_defense:
         eps=0.05
         eps_iter=1.0/255.0
         self.target = False
-        self.model.heads.MODE = 'C'
-
 
         dict = {
-            'FGSM'    :FGSM  (self.temp_cfg,self.model, loss_fn, eps=eps, targeted=self.target),
-            'IFGSM'   :IFGSM (self.temp_cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.temp_cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-            'ODFA'    :ODFA  (self.temp_cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
+            'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=self.target),
+            'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
+            'ODFA'    :ODFA  (self.temp_cfg,self.temp_model, odfa,eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.temp_cfg,self.model)
+            'MUAP'    :MUAP(self.temp_cfg,self.temp_model)
         }
         return dict[self.cfg.ATTACKMETHOD]
 

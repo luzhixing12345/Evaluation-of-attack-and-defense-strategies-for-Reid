@@ -3,10 +3,11 @@
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import get_result, get_train_set
+from fastreid.utils.reid_patch import eval_train, get_result, get_train_set
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
+import time
 
 from torch import Tensor
 device='cuda'
@@ -22,33 +23,38 @@ def gradient_regulation(cfg,train_data_loader):
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
     
     loss_fun = nn.CrossEntropyLoss()
-    loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
+    loss_calcuation = InputGradRegLoss(weight = 50.0,criterion = loss_fun,norm = 'L2')
     max_id = 4000
-    EPOCH = 5
+    EPOCH = 1
+    model.heads.MODE = 'C'
 
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start epoch {epoch} for gradient regulation defense')
         model.train()
+        time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
         for batch_idx,data in enumerate(train_data_loader):
             if batch_idx>max_id :
                 break
+            
+            optimizer.zero_grad()
             clean_data = (data['images']/255.0).to(device)
-            clean_data = clean_data.detach()
+            clean_data = clean_data.clone().detach()
             clean_data.requires_grad_()
             targets = data['targets'].to(device)
 
-            optimizer.zero_grad()
             logits = model(clean_data)
             loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
-        print(f'loss_total = {loss_total} in epoch {epoch}')
+        eval_train(model,train_data_loader)
+        time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
+        print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
 
     print('finished gra_training !')
-    Checkpointer(model,'model').save('def_trained')
+    Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print('Successfully saved the gra_trained model !')
 
 

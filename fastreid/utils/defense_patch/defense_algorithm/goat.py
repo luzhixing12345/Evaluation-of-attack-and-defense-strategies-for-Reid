@@ -8,7 +8,7 @@ import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.advertorch.attacks import PGDAttack
-from fastreid.utils.reid_patch import eval_ssim, get_result, get_train_set, pairwise_distance
+from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict, pairwise_distance
 import numpy as np
 import time
 
@@ -20,31 +20,31 @@ def GOAT(cfg,train_data_loader):
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)
     model.RESIZE = True
-    model.heads.MODE = 'F'
+    
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
     model.to(device)
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
 
-
-    max_epoch = 500 
+    train_batch_size = cfg.SOLVER.IMS_PER_BATCH
+    training_set_imgNumber = {'Market1501':12936,'DukeMTMC':16522}
+    
+    img_circle = training_set_imgNumber[cfg.DATASETS.NAMES[0]]//train_batch_size+1
     request_dict = defaultdict(list)
-    # This max_epoch is smaller than others, that's because `request_dict` is used to restore images
-    # if too large it will maximun capacity exceeded
-
-
-    criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
-    EPOCH = 5
-    frequency = 50
 
     for id,data in enumerate(train_data_loader):
-        if id>max_epoch:
+        if id>img_circle:
             break
         targets =data['targets'].cpu()
         image = (data['images']/255).cpu()
         for id,img in zip(targets,image):
             request_dict[id.item()].append(img)
-  
+            
+    max_epoch = 4000
+    EPOCH = 1
+    frequency = 800
+    
+    model.train()
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start training for epoch {epoch} of {EPOCH}')
@@ -55,22 +55,22 @@ def GOAT(cfg,train_data_loader):
             inputs_clean = (data['images']/255).to(device)
             labels = data['targets'].to(device)       
                 
+            model.heads.MODE = 'F'
             adv_images = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
             if index % frequency ==0:
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
-            model.train()
             # zero the parameter gradients
+            model.heads.MODE = 'FC'
             optimizer.zero_grad()
             outputs = model(adv_images)
-            dist = pairwise_distance(outputs, outputs)
-            dist_ap, dist_an, list_triplet = get_distances(dist, labels)
-            y = torch.ones(dist_ap.size(0)).to(device)
-            loss = criterion(dist_an, dist_ap, y)
-
+            loss_dict =model.losses(outputs, labels)
+            loss = sum(loss_dict.values())
+            
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
+            
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 
@@ -78,7 +78,6 @@ def GOAT(cfg,train_data_loader):
     Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print(f'Successfully saved the {cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE} model !')
  
-
 
 def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r=4):
     """Create an adversarial batch from a given batch for adversarial training with GOAT
@@ -153,7 +152,7 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
             criterion = sum_dif_mse
         requests = requests.to(device)
 
-    attack = PGDAttack(lambda x: model(x), criterion, eps=0.05, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True,clip_max=255.0)
+    attack = PGDAttack(lambda x: model(x), criterion, eps=5/255.0, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
     data_adv = attack.perturb(inputs, requests)
     return data_adv
 

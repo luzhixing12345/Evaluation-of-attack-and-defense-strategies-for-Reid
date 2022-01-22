@@ -72,11 +72,10 @@ class MUAP:
         loss = 0
         for epoch in range(self.EPOCH):
             
-            attack_img = self.normalize_transform(attack_img)
-            attack_img = attack_img.detach()
-            attack_img.requires_grad_()
+            normed_atta_img = self.normalize_transform(attack_img)
+            normed_atta_img = normed_atta_img.to(device)
 
-            median_img = torch.add(images,attack_img.to(device)).to(device)   #mix attack img and clean img
+            median_img = torch.add(images,normed_atta_img).to(device)   #mix attack img and clean img
             
             
             feat = self.model(images)
@@ -111,18 +110,17 @@ class MUAP:
 
         new_images = []
         for i in range(N):
+            self.pre_loss = np.inf
             img = images[:,i,:,:,:].to(device)
             attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
             attack_img = attack_img.to(device)
             
             loss = 0
             for epoch in range(self.EPOCH):
-                attack_img = self.normalize_transform(attack_img)
-                attack_img = attack_img.detach()
-                attack_img.requires_grad_()
+                normed_atta_img = self.normalize_transform(attack_img)
+                normed_atta_img = normed_atta_img.to(device)
 
-                attack_img = Variable(attack_img, requires_grad=True)
-                median_img = torch.add(img,attack_img.to(device)).to(device)   #mix attack img and clean img
+                median_img = torch.add(img,normed_atta_img).to(device)   #mix attack img and clean img
 
                 feat = self.model(img)
                 attack_feat = self.model(median_img)

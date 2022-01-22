@@ -231,7 +231,6 @@ class Generator:
         adv_imgs = images + batch_clamp(self.delta, perturbations) * saliency_map
         adv_imgs = torch.clamp(adv_imgs, min=self.clip_min, max=self.clip_max)
 
-        print('adv-ori',adv_imgs-images)
         return adv_imgs
 
     def GA(self,images):
@@ -268,10 +267,11 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     mse_loss = nn.MSELoss(reduction='sum').to(device)
     loss_total = 0
 
-    EPOCHS = 20
+    EPOCHS = 10
     delta = 0.1
     alpha = 0.0001
     model.eval()
+    model.heads.MODE = 'F'
     if not pretrained:
         for epoch in range(EPOCHS):
 
@@ -307,7 +307,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 optimizer.step()
             time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
             print(f'total_loss for epoch {epoch} of {EPOCHS} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
-
+            loss_total = 0
         optimizer = optim.Adam(generator.parameters(), lr=1e-4)
         loss_total = 0
         for epoch in range(EPOCHS):
@@ -343,12 +343,13 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 frobenius_loss = torch.norm(saliency_map, dim=(1,2), p=2).sum()
                 loss += alpha * (norm_loss + frobenius_loss)
 
+                loss_total+=loss.item()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
             time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
             print(f'total_loss for epoch {epoch} of {EPOCHS} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
-
+            loss_total = 0
         torch.save(generator.state_dict(), save_pos)
         print(f'save model weights in {save_pos}')
     else:

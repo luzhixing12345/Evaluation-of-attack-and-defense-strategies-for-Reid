@@ -23,7 +23,7 @@ class defense:
             'GOAT':goat_defense,
             'EST':robrank_defense,
             'SES':robrank_defense,
-            'PNP':robrank_defense,
+            'GRA':gradient_regulation_defense
         }
         if self.cfg.DEFENSEMETHOD == 'ADV':
             self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{self.cfg.DEFENSEMETHOD}_{self.cfg.ATTACKMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}.pth'

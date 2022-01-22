@@ -23,7 +23,7 @@ device= 'cuda'
 excel_name = 'result.xlsx'
 
 Attack_algorithm_library=['FGSM','IFGSM','MIFGSM','ODFA','MISR','FNA','MUAP','SSAE']
-Defense_algorithm_library=['ADV','GOAT','EST','SES','PNP']
+Defense_algorithm_library=['ADV','GOAT','EST','SES','GRA']
 
 evaluation_indicator=['Rank-1','mAP',"TPR@FPR={:.0e}".format(1e-2)]
 evaluation_attackIndex= ['DmAP','SDSIM','AttackIndex']
@@ -51,7 +51,7 @@ def get_train_set(cfg):
     return train_data_loader
 
 @torch.no_grad()
-def eval_train(model,data_loader,max_id=-1):
+def eval_train(model,data_loader,max_id=200):
     print('*****************evluation*****************\n')
     model.eval()
     model.heads.MODE = 'C'
@@ -59,7 +59,7 @@ def eval_train(model,data_loader,max_id=-1):
     softmax = nn.Softmax(dim=1)
     n=0
     for id,data in enumerate(data_loader):
-        if max_id!=-1 and id>max_id:
+        if id>max_id:
             break
         images = (data['images']/255).to(device)
         logits = model(images)
@@ -68,9 +68,9 @@ def eval_train(model,data_loader,max_id=-1):
         targets = data['targets'].to(device)
         correct += pred.eq(targets.view_as(pred)).sum().item()
         n+=targets.shape[0]
+        
     print(f'accurency : {correct}/{n} = {100. * correct / n}%\n')
     print('*****************end-evluation*****************')
-    return 100. * correct / n
 
 def eval_ssim(images1,images2):
     size = images1.shape[0]
