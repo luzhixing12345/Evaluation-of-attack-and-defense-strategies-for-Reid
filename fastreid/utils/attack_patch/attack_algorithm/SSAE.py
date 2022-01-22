@@ -267,7 +267,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     mse_loss = nn.MSELoss(reduction='sum').to(device)
     loss_total = 0
 
-    EPOCHS = 10
+    EPOCHS = 20
     delta = 0.1
     alpha = 0.0001
     model.eval()
