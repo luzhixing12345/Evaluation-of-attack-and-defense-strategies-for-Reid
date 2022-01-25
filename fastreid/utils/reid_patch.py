@@ -73,6 +73,7 @@ def eval_train(model,data_loader,max_id=200):
     print('*****************end-evluation*****************')
 
 def eval_ssim(images1,images2):
+    print(images1.shape,images2.shape)
     size = images1.shape[0]
     SSIM = 0
     for i in range(size):

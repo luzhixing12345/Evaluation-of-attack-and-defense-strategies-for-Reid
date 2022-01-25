@@ -154,8 +154,9 @@ class GalleryAttack:
 
                 if self.cfg.ATTACKMETHOD=='FNA':
                     top = self.indices[q_idx][keep][0]
-                    selected_images.append(self.gallery_images[top])
-                    selected_ids.append(torch.tensor(top))
+                    top_features = self.gallery_images[top].unsqueeze(0)
+                    selected_images[-1] = torch.cat((selected_images[-1],top_features),0)
+                    selected_ids[-1] = torch.cat((selected_ids[-1],torch.tensor([top])))
             else :
                 # random sampling from top-3M for GA-
                 sample_id = self.indices[q_idx][keep][:10]
@@ -165,8 +166,9 @@ class GalleryAttack:
 
                 if self.cfg.ATTACKMETHOD=='FNA':
                     bottom = self.indices[q_idx][keep][-1]
-                    selected_images.append(self.gallery_images[bottom])
-                    selected_ids.append(torch.tensor(bottom))
+                    bottom_features = self.gallery_images[bottom].unsqueeze(0)
+                    selected_images[-1] = torch.cat((selected_images[-1],bottom_features),0)
+                    selected_ids[-1] = torch.cat((selected_ids[-1],torch.tensor([bottom])))
 
         selected_images = torch.stack(selected_images)
         selected_ids  =  torch.stack(selected_ids)

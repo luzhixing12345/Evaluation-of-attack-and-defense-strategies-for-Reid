@@ -101,7 +101,8 @@ class QueryAttack:
 
                 if self.cfg.ATTACKMETHOD=='FNA':
                     top = self.indices[q_idx][keep][0]
-                    selected_features.append(self.gallery_features[top])
+                    top_features = self.gallery_features[top].unsqueeze(0)
+                    selected_features[-1] = torch.cat((selected_features[-1],top_features),0)
             else :
                 # select top 10 images, and generally assume them to be ground truth 
                 sample_id = self.indices[q_idx][keep][:10]
@@ -109,7 +110,8 @@ class QueryAttack:
 
                 if self.cfg.ATTACKMETHOD=='FNA':
                     bottom = self.indices[q_idx][keep][-1]
-                    selected_features.append(self.gallery_features[bottom])
+                    bottom_features = self.gallery_features[bottom].unsqueeze(0)
+                    selected_features[-1] = torch.cat((selected_features[-1],bottom_features),0)
 
         selected_features = torch.stack(selected_features)
         return selected_features

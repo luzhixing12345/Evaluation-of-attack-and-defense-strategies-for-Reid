@@ -141,9 +141,9 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     
     loss_G_ReID = (xent_loss+ global_loss)*10
 
-    # from .util.ms_ssim import msssim
-    # loss_func = msssim
-    # loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
+    from .util.ms_ssim import msssim
+    loss_func = msssim
+    loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
 
     ############## Forward ###############
     loss_D = (loss_D_fake + loss_D_real)/2

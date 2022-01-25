@@ -26,10 +26,10 @@ def GOAT(cfg,train_data_loader):
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
 
+
     train_batch_size = cfg.SOLVER.IMS_PER_BATCH
-    training_set_imgNumber = {'Market1501':12936,'DukeMTMC':16522}
-    
-    img_circle = training_set_imgNumber[cfg.DATASETS.NAMES[0]]//train_batch_size+1
+   
+    img_circle = 20000//train_batch_size
     request_dict = defaultdict(list)
 
     for id,data in enumerate(train_data_loader):
@@ -40,11 +40,13 @@ def GOAT(cfg,train_data_loader):
         for id,img in zip(targets,image):
             request_dict[id.item()].append(img)
             
-    max_epoch = 4000
-    EPOCH = 1
+    max_epoch = 2000
+    EPOCH = 3
     frequency = 800
+    loss_fun = nn.CrossEntropyLoss()
     
     model.train()
+    eval_train(model,train_data_loader)
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start training for epoch {epoch} of {EPOCH}')
@@ -61,12 +63,13 @@ def GOAT(cfg,train_data_loader):
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
             # zero the parameter gradients
-            model.heads.MODE = 'FC'
-            optimizer.zero_grad()
+            model.heads.MODE = 'C'
+            adv_images = adv_images.clone().detach().to(device)
+            adv_images.requires_grad_()
             outputs = model(adv_images)
-            loss_dict =model.losses(outputs, labels)
-            loss = sum(loss_dict.values())
-            
+            #loss_dict =model.losses(outputs, labels)
+            loss = loss_fun(outputs,labels)
+            optimizer.zero_grad()
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
@@ -152,8 +155,9 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
             criterion = sum_dif_mse
         requests = requests.to(device)
 
-    attack = PGDAttack(lambda x: model(x), criterion, eps=5/255.0, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
+    attack = PGDAttack(lambda x: model(x), criterion, eps=0.05, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
     data_adv = attack.perturb(inputs, requests)
+    model.zero_grad()
     return data_adv
 
 mse = torch.nn.MSELoss(reduction='sum')

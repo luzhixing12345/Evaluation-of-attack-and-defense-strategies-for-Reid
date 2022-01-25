@@ -109,13 +109,13 @@ class TrainingHead(nn.Module):
         neck_feat = self.bottleneck(pool_feat)
         neck_feat = neck_feat[..., 0, 0]
 
-        if self.MODE == 'F':
-            return neck_feat
+
         # Evaluation
         # fmt: off
         #if not self.training: return neck_feat
         # fmt: on
-
+        if self.MODE == 'F':
+            return neck_feat
         # Training
         if self.cls_layer.__class__.__name__ == 'Linear':
             logits = F.linear(neck_feat, self.weight)

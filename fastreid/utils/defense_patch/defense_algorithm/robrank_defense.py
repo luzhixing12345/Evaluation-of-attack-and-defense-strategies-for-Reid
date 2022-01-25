@@ -43,7 +43,7 @@ def RobRank_defense(cfg,train_set,str):
 
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
     max_id = 4000
-    EPOCH = 1
+    EPOCH = 3
  
     for epoch in range(EPOCH):
         model.train()
@@ -58,10 +58,10 @@ def RobRank_defense(cfg,train_set,str):
             labels = data['targets'].to(device)
 
             #model.heads.MODE = 'F'
-            optimizer.zero_grad()
             loss = train_step(model,images,labels,id)
-
+            
             loss_total+=loss
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         eval_train(model,train_set)
@@ -102,10 +102,9 @@ def EST_training_step(model, images, labels,id):
         print(f'ssim = {eval_ssim(images,advimgs)}')
     
     model.train()
-    model.heads.MODE = 'FC'
+    model.heads.MODE = 'C'
     output = model(advimgs)
-    loss_dict = model.losses(output,labels)
-    loss = sum(loss_dict.values())
+    loss = nn.CrossEntropyLoss()(output,labels)
     return loss
 
 def mmt_training_step(model: torch.nn.Module, images,labels,id):
@@ -231,9 +230,7 @@ def SES_training_step(model, images,labels,id):
     output_adv = model(advimgs)
     model.heads.MODE = 'FC'
     output_orig = model(images)
-    loss_orig = model.losses(output_orig, labels)
-    loss_orig = sum(loss_orig.values())
-    
+    loss_orig = nn.CrossEntropyLoss()(output_orig['cls_outputs'], labels)
     nori = F.normalize(output_orig['features'])
     nadv = F.normalize(output_adv)
     embshift = F.pairwise_distance(nadv, nori)

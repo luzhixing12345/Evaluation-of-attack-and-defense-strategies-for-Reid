@@ -23,9 +23,9 @@ def gradient_regulation(cfg,train_data_loader):
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
     
     loss_fun = nn.CrossEntropyLoss()
-    loss_calcuation = InputGradRegLoss(weight = 50.0,criterion = loss_fun,norm = 'L2')
-    max_id = 4000
-    EPOCH = 1
+    loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
+    max_id = 1000
+    EPOCH = 3
     model.heads.MODE = 'C'
 
     for epoch in range(EPOCH):
@@ -36,22 +36,19 @@ def gradient_regulation(cfg,train_data_loader):
         for batch_idx,data in enumerate(train_data_loader):
             if batch_idx>max_id :
                 break
-            
-            optimizer.zero_grad()
             clean_data = (data['images']/255.0).to(device)
             clean_data = clean_data.clone().detach()
             clean_data.requires_grad_()
             targets = data['targets'].to(device)
-
             logits = model(clean_data)
             loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
             loss_total+=loss.item()
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         eval_train(model,train_data_loader)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
-
 
     print('finished gra_training !')
     Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
@@ -78,7 +75,6 @@ class InputGradReg(object):
         # loss只能为标量，但若loss输入为向量的情况，grad_outputs内部和其点乘求和，在对x的每个分量分别求导数
         # 知乎：https://zhuanlan.zhihu.com/p/83172023
         # 简单地理解成在求梯度时的权重
-        x = x*255
         x_grad = autograd.grad(loss, x, grad_outputs=grad_outputs, retain_graph=True, create_graph=True)[0]
 
         if self.norm == "L1":

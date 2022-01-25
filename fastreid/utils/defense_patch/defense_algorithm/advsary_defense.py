@@ -54,13 +54,14 @@ class adversary_defense:
         max_id = 4000
         alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
         frequency = 800 
+        loss_fun = nn.CrossEntropyLoss()
 
         self.model.train()
         self.model.heads.MODE = 'FC'
 
         for epoch in range(EPOCH):
             loss_total = 0
-            self.model.heads.MODE = 'FC'
+            self.model.heads.MODE = 'C'
             print(f'start training for epoch {epoch} of {EPOCH}')
             time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
             for id,data in enumerate(self.train_set):
@@ -76,19 +77,15 @@ class adversary_defense:
 
                 if id % frequency==0:
                     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
-                optimizer.zero_grad()
-
                 output_clean = self.model(make_dict(images,target))
                 output_dirty = self.model(make_dict(adv_images,target))
                 
-                loss_clean_dict = self.model.losses(output_clean,target)
-                loss_dirty_dict = self.model.losses(output_dirty,target)
-                
-                loss_clean = sum(loss_clean_dict.values())
-                loss_dirty = sum(loss_dirty_dict.values())
+                loss_clean = loss_fun(output_clean,target)
+                loss_dirty = loss_fun(output_dirty,target)
 
                 loss = loss_clean*alpha+loss_dirty*(1-alpha)
                 loss_total+=loss.item()
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
             eval_train(self.model,self.train_set)
