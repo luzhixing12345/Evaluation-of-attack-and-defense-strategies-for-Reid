@@ -1,5 +1,6 @@
 
 
+
 import torch
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
@@ -11,7 +12,7 @@ from fastreid.utils.advertorch.attacks import PGDAttack
 from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict, pairwise_distance
 import numpy as np
 import time
-
+from .sort_dataset import sort_datasets
 device='cuda'
 
 #Rank 防御方法
@@ -26,35 +27,39 @@ def GOAT(cfg,train_data_loader):
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
 
-
-    train_batch_size = cfg.SOLVER.IMS_PER_BATCH
-   
-    img_circle = 20000//train_batch_size
-    request_dict = defaultdict(list)
-
-    for id,data in enumerate(train_data_loader):
-        if id>img_circle:
-            break
-        targets =data['targets'].cpu()
-        image = (data['images']/255).cpu()
-        for id,img in zip(targets,image):
-            request_dict[id.item()].append(img)
-            
     max_epoch = 2000
     EPOCH = 3
     frequency = 800
     loss_fun = nn.CrossEntropyLoss()
     
-    model.train()
+    # model.train()
+    # for _,parm in enumerate(model.parameters()):
+    #     parm.requires_grad=True
+    # print('all parameters of model requires_grad')
+    request_dict = defaultdict(list)
+    N = 18000//64
+    for idx,data in enumerate(train_data_loader):
+        if idx>N:
+            break
+        images = (data['images']/255).cpu()
+        labels = data['targets'].cpu()
+        for img,label in zip(images,labels):
+            request_dict[label.item()].append(img)
+        
+        if idx%100==0:
+            print(len(request_dict.keys()))
+    
     eval_train(model,train_data_loader)
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start training for epoch {epoch} of {EPOCH}')
         time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
+        model.train()
         for index, data in enumerate(train_data_loader):
             if index>max_epoch:
                 break
-            inputs_clean = (data['images']/255).to(device)
+            with torch.no_grad():
+                inputs_clean = torch.div(data['images'],255).to(device)
             labels = data['targets'].to(device)       
                 
             model.heads.MODE = 'F'
@@ -66,9 +71,12 @@ def GOAT(cfg,train_data_loader):
             model.heads.MODE = 'C'
             adv_images = adv_images.clone().detach().to(device)
             adv_images.requires_grad_()
+            
             outputs = model(adv_images)
             #loss_dict =model.losses(outputs, labels)
+            #loss_dict = model.losses(outputs,labels)
             loss = loss_fun(outputs,labels)
+            
             optimizer.zero_grad()
             loss_total+=loss.item()
             loss.backward()
@@ -105,6 +113,7 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
         Tensor: batch of adversarial images
     """
     model.eval()
+    model.heads.MODE = 'F'
     if request_dict: # GOAT : INTER BATCH
         requests = []
         if nb_r > 1:
@@ -112,7 +121,10 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
                 R = []
                 for label in labels:
                     image = request_dict[label.item()]
-                    r = i%(len(image))
+                    if rand_r:
+                        r = np.random.randint(len(image))
+                    else:
+                        r = i%(len(image))
                     R.append(image[r])
                 R = torch.stack(R).to(device)
                 with torch.no_grad():
@@ -122,7 +134,7 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
             criterion = sum_mse
         else:
             for label in labels:
-                image = request_dict[label.cpu().numpy()[0]]
+                image = request_dict[label.item()]
                 if rand_r:
                     r = np.random.randint(len(image))
                 else:
@@ -155,9 +167,8 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
             criterion = sum_dif_mse
         requests = requests.to(device)
 
-    attack = PGDAttack(lambda x: model(x), criterion, eps=0.05, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
+    attack = PGDAttack(lambda x: model(x), criterion, eps=5/255, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
     data_adv = attack.perturb(inputs, requests)
-    model.zero_grad()
     return data_adv
 
 mse = torch.nn.MSELoss(reduction='sum')
@@ -219,6 +230,8 @@ class goat_defense:
         self.train_set = get_train_set(self.cfg)
 
     def defense(self):
+        # requests = sort_datasets(self.cfg.DATASETS.NAMES[0])
+        print('\n-----start GOAT defensing-----\n')
         GOAT(self.cfg,self.train_set)
 
     def get_defense_result(self):

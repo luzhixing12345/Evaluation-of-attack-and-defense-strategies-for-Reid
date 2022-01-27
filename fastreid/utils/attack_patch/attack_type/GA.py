@@ -58,9 +58,9 @@ class GalleryAttack:
         features = []
 
         for _,data in enumerate(test_dataset):
-            images.append((data['images']/255.0).cpu())
+            images.append((data['images']/255).cpu())
             with torch.no_grad():
-                features.append(self.model(data['images']/255.0).cpu())
+                features.append(self.model(data['images']/255).cpu())
             pids.append(data['targets'].cpu())
             camids.append(data['camids'].cpu())
         
@@ -98,10 +98,10 @@ class GalleryAttack:
         eps=0.05
         eps_iter=1.0/255.0
         dict = {
-            'FGSM'  :FGSM(self.cfg,self.model, mse, eps=eps,targeted=self.target),
-            'IFGSM' :IFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False),
-            'MIFGSM':MIFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1),
-            'ODFA'    :ODFA(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False),
+            'FGSM'  :FGSM(self.cfg,self.model, mse, eps=eps,targeted=self.target,clip_max=255.0),
+            'IFGSM' :IFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,rand_init=False,clip_max=255.0),
+            'MIFGSM':MIFGSM(self.cfg,self.model,mse, eps=eps, eps_iter=eps_iter,targeted=self.target,decay_factor=1,clip_max=255.0),
+            'ODFA'    :ODFA(self.cfg,self.model, odfa, eps=eps, eps_iter=eps_iter,targeted=not self.target,rand_init=False,clip_max=255.0),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
             'MUAP'    :MUAP(self.cfg,self.model),
@@ -258,7 +258,7 @@ class GalleryAttack:
         self.query_data_loader = get_query_set(self.cfg)
         for q_idx ,data in enumerate(self.query_data_loader):
             
-            images = (data['images']/255).clone().to(device).detach()
+            images = data['images'].clone().to(device).detach()
             target = data['targets'].to(device)
 
             selected_images,selected_ids= self.select_samples(q_idx,images.shape[0],self.cfg.ATTACKDIRECTION)

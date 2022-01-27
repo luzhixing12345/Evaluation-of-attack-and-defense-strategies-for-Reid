@@ -1,6 +1,7 @@
 import time
+from sklearn.feature_extraction import image
 import torch.nn as nn
-import copy
+import torch
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
@@ -29,16 +30,10 @@ class adversary_defense:
         self.SSAE_generator = None
         self.MISR_generator = None
 
-        self.temp_cfg = copy.deepcopy(self.cfg)
-        self.temp_cfg.ATTACKTYPE = 'QA'
-        
-        self.temp_model = copy.deepcopy(self.model)
-        self.temp_model.heads.MODE = 'C'
-
         if self.cfg.ATTACKMETHOD == 'SSAE':
-            self.SSAE_generator = make_SSAE_generator(self.temp_cfg,self.temp_model,pretrained=True)
+            self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=True)
         elif self.cfg.ATTACKMETHOD == 'MISR':
-            self.MISR_generator = make_MIS_Ranking_generator(self.temp_cfg,pretrained=True)
+            self.MISR_generator = make_MIS_Ranking_generator(self.cfg,pretrained=True)
 
 
     def get_defense_result(self):
@@ -48,37 +43,45 @@ class adversary_defense:
         attack_method = self.getAttackMethod()
 
         optimizer = DefaultTrainer.build_optimizer(self.cfg, self.model)
-        #loss_fun = nn.CrossEntropyLoss()
-
-        EPOCH = 3
-        max_id = 4000
-        alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
-        frequency = 800 
         loss_fun = nn.CrossEntropyLoss()
 
-        self.model.train()
-        self.model.heads.MODE = 'FC'
+        EPOCH = 3
+        max_id = 2000
+        alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
+        frequency = 800 
+        #loss_fun = nn.CrossEntropyLoss()
+
+        # self.model.train()
+        # for _,parm in enumerate(self.model.parameters()):
+        #     parm.requires_grad=True
+        # print('all parameters of model requires_grad')
 
         for epoch in range(EPOCH):
             loss_total = 0
-            self.model.heads.MODE = 'C'
             print(f'start training for epoch {epoch} of {EPOCH}')
             time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
+            self.model.train()
             for id,data in enumerate(self.train_set):
                 if id>max_id:
                     break
                 target = data['targets'].to(device)
-                images = (data['images']/255.0).to(device)
-
-                if self.cfg.ATTACKMETHOD == 'MUAP':
-                    adv_images = attack_method(images,target)
-                else:
-                    adv_images = attack_method(images,target)
-
+                with torch.no_grad():
+                    images = torch.div(data['images'],255).to(device)
+                    
+                self.model.heads.MODE = 'C'
+                adv_images = attack_method(images,target)
+                
                 if id % frequency==0:
                     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
-                output_clean = self.model(make_dict(images,target))
-                output_dirty = self.model(make_dict(adv_images,target))
+                self.model.heads.MODE = 'C'
+                
+                images = images.clone().detach()
+                adv_images = adv_images.clone().detach()
+                images.requires_grad_()
+                adv_images.requires_grad_()
+                
+                output_clean = self.model(images)
+                output_dirty = self.model(adv_images)
                 
                 loss_clean = loss_fun(output_clean,target)
                 loss_dirty = loss_fun(output_dirty,target)
@@ -101,20 +104,20 @@ class adversary_defense:
 
     def getAttackMethod(self):
         #mse = nn.MSELoss(reduction='sum')
-        loss_fn = nn.CrossEntropyLoss(reduction="sum")
+        loss_fn = nn.CrossEntropyLoss()
         def odfa(f1,f2):
             return loss_fn(-f1,f2)
 
         eps=0.05
         eps_iter=1.0/255.0
         dict = {
-            'FGSM'    :FGSM  (self.temp_cfg,self.temp_model, loss_fn, eps=eps, targeted=False),
-            'IFGSM'   :IFGSM (self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.temp_cfg,self.temp_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,decay_factor=1),
-            'ODFA'    :ODFA  (self.temp_cfg,self.temp_model, odfa,eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
+            'FGSM'    :FGSM  (self.cfg,self.model, loss_fn, eps=eps, targeted=False),
+            'IFGSM'   :IFGSM (self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,decay_factor=1),
+            'ODFA'    :ODFA  (self.cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.temp_cfg,self.temp_model)
+            'MUAP'    :MUAP(self.cfg,self.model)
         }
         return dict[self.cfg.ATTACKMETHOD]
 

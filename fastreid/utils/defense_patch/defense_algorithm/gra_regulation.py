@@ -24,9 +24,12 @@ def gradient_regulation(cfg,train_data_loader):
     
     loss_fun = nn.CrossEntropyLoss()
     loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
-    max_id = 1000
+    max_id = 2000
     EPOCH = 3
     model.heads.MODE = 'C'
+    for _,parm in enumerate(model.parameters()):
+        parm.requires_grad=True
+    print('all parameters of model requires_grad')
 
     for epoch in range(EPOCH):
         loss_total = 0
@@ -36,7 +39,8 @@ def gradient_regulation(cfg,train_data_loader):
         for batch_idx,data in enumerate(train_data_loader):
             if batch_idx>max_id :
                 break
-            clean_data = (data['images']/255.0).to(device)
+            with torch.no_grad():
+                clean_data = torch.div(data['images'],255).to(device)
             clean_data = clean_data.clone().detach()
             clean_data.requires_grad_()
             targets = data['targets'].to(device)

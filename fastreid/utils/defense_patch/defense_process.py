@@ -1,5 +1,6 @@
 
 
+import copy
 from .defense_algorithm import *
 from ..attack_patch.attack_process import attack
 from tabulate import tabulate
@@ -29,8 +30,9 @@ class defense:
             self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{self.cfg.DEFENSEMETHOD}_{self.cfg.ATTACKMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}.pth'
         else:
             self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{self.cfg.DEFENSEMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}.pth'
-    
-        self.DefenseProcess = dict[self.cfg.DEFENSEMETHOD](self.cfg)
+        temp_cfg = copy.deepcopy(self.cfg)
+        temp_cfg.ATTACKTYPE = 'QA'
+        self.DefenseProcess = dict[temp_cfg.DEFENSEMETHOD](temp_cfg)
 
     def start_defense(self):
         if self.pretrained:

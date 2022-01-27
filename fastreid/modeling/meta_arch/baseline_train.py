@@ -122,6 +122,8 @@ class Baseline_train(nn.Module):
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
 
+        #images = torch.sub(images,self.pixel_mean)
+        #images = torch.div(images,self.pixel_std)
         images.sub_(self.pixel_mean).div_(self.pixel_std)
         return images
 
@@ -136,7 +138,7 @@ class Baseline_train(nn.Module):
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
 
-        images = images*255.0
+        images = torch.mul(images,255.0)
         images.sub_(self.pixel_mean).div_(self.pixel_std)
         return images
 

@@ -42,8 +42,11 @@ def RobRank_defense(cfg,train_set,str):
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
-    max_id = 4000
+    max_id = 2000
     EPOCH = 3
+    for _,parm in enumerate(model.parameters()):
+        parm.requires_grad=True
+    print('all parameters of model requires_grad')
  
     for epoch in range(EPOCH):
         model.train()
@@ -53,10 +56,10 @@ def RobRank_defense(cfg,train_set,str):
         for id,data in enumerate(train_set):
             if id>max_id:
                 break
-            
-            images = (data['images']/255.0).to(device)
+            with torch.no_grad():
+                images = torch.div(data['images'],255.0).to(device)
+                
             labels = data['targets'].to(device)
-
             #model.heads.MODE = 'F'
             loss = train_step(model,images,labels,id)
             
@@ -100,11 +103,13 @@ def EST_training_step(model, images, labels,id):
     advimgs = advrank.embShift(images)
     if id % 800 == 0:
         print(f'ssim = {eval_ssim(images,advimgs)}')
-    
+    # advimgs = advimgs.clone().detach()
+    # advimgs.requires_grad_()
     model.train()
-    model.heads.MODE = 'C'
+    model.heads.MODE = 'FC'
     output = model(advimgs)
-    loss = nn.CrossEntropyLoss()(output,labels)
+    loss_dict = model.losses(output,labels)
+    loss = sum(loss_dict.values())
     return loss
 
 def mmt_training_step(model: torch.nn.Module, images,labels,id):
@@ -226,17 +231,23 @@ def SES_training_step(model, images,labels,id):
     model.eval()
     advimgs = advrank.embShift(images)
     model.train()
+    
+    # advimgs = advimgs.clone().detach()
+    # advimgs.requires_grad_()
+    # images = images.clone().detach()
+    # images.requires_grad_()
+    
     # evaluate advtrain loss
     output_adv = model(advimgs)
     model.heads.MODE = 'FC'
     output_orig = model(images)
-    loss_orig = nn.CrossEntropyLoss()(output_orig['cls_outputs'], labels)
+    loss_orig = model.losses(output_orig, labels)
     nori = F.normalize(output_orig['features'])
     nadv = F.normalize(output_adv)
     embshift = F.pairwise_distance(nadv, nori)
     # loss and log
     # method 1: loss_triplet + loss_embshift
-    loss = loss_orig + 1.0 * embshift.mean()
+    loss = sum(loss_orig.values()) + 1.0 * embshift.mean()
     # method 2: loss_triplet + loss_embshiftp2
     #loss = loss_orig + 1.0 * (embshift ** 2).mean()
 

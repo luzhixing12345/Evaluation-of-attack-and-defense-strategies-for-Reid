@@ -149,16 +149,17 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
     ############## Backward #############
+        # update discriminator weights
+    optimizer_D.zero_grad()
+    loss_D.backward()
+    optimizer_D.step()
+
     # update generator weights
     optimizer_G.zero_grad()
     #loss_G.backward(retain_graph=True)
     loss_G.backward()
     optimizer_G.step()
 
-    # update discriminator weights
-    optimizer_D.zero_grad()
-    loss_D.backward()
-    optimizer_D.step()
 
 
     loss_G_total+=loss_G.item()
