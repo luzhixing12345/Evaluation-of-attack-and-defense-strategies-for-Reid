@@ -37,7 +37,8 @@ def GOAT(cfg,train_data_loader):
     #     parm.requires_grad=True
     # print('all parameters of model requires_grad')
     request_dict = defaultdict(list)
-    N = 18000//64
+    train_batch_size = cfg.SOLVER.IMS_PER_BATCH
+    N = 18000//train_batch_size
     for idx,data in enumerate(train_data_loader):
         if idx>N:
             break
@@ -60,6 +61,9 @@ def GOAT(cfg,train_data_loader):
                 break
             with torch.no_grad():
                 inputs_clean = torch.div(data['images'],255).to(device)
+                
+            inputs_clean = inputs_clean.clone().detach()
+            inputs_clean.requires_grad_()
             labels = data['targets'].to(device)       
                 
             model.heads.MODE = 'F'
@@ -68,14 +72,12 @@ def GOAT(cfg,train_data_loader):
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
             # zero the parameter gradients
-            model.heads.MODE = 'C'
-            adv_images = adv_images.clone().detach().to(device)
-            adv_images.requires_grad_()
-            
+            model.heads.MODE = 'FC'
             outputs = model(adv_images)
             #loss_dict =model.losses(outputs, labels)
-            #loss_dict = model.losses(outputs,labels)
-            loss = loss_fun(outputs,labels)
+            loss_dict = model.losses(outputs,labels)
+            loss = sum(loss_dict.values())
+            #loss = loss_fun(outputs,labels)
             
             optimizer.zero_grad()
             loss_total+=loss.item()

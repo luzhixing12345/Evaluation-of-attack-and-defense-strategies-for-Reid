@@ -47,8 +47,8 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   check_freezen(model, need_modified=True, after_modified=False)
 
-  #G = Generator(3, 3, 32, norm='bn').apply(weights_init)
-  G = ResnetG(3,3,32).apply(weights_init)
+  G = Generator(3, 3, 32, norm='bn').apply(weights_init)
+  #G = ResnetG(3,3,32).apply(weights_init)
   D = MS_Discriminator(input_nc=6).apply(weights_init)
   #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
@@ -98,11 +98,14 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
   SSIM = []
   print(f"start training epoch {epoch} for Mis-ranking model G and D")
   for batch_idx, data in enumerate(trainloader):
-    if batch_idx>5000:
+    if batch_idx>4000:
       break
-    imgs = (data['images']/255).cuda()
-    #imgs = data['images'].cuda()
-    pids = data['targets'].cuda()
+    with torch.no_grad():
+      imgs = (data['images']/255).to(device)
+      
+    imgs = imgs.clone().detach()
+    imgs.requires_grad_()
+    pids = data['targets'].to(device)
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
 
     if batch_idx % 1000 == 0:
@@ -151,15 +154,14 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     ############## Backward #############
         # update discriminator weights
     optimizer_D.zero_grad()
-    loss_D.backward()
-    optimizer_D.step()
-
+    loss_D.backward(retain_graph=True)
+    
     # update generator weights
     optimizer_G.zero_grad()
     #loss_G.backward(retain_graph=True)
     loss_G.backward()
+    optimizer_D.step()
     optimizer_G.step()
-
 
 
     loss_G_total+=loss_G.item()
@@ -190,8 +192,8 @@ def perturb(imgs, G, D, cfg,train_or_test='test'):
 
 def L_norm(cfg,delta, mode='train'):
 
-  delta.data += 1 
-  delta.data *= 0.5
+  # delta.data += 1 
+  # delta.data *= 0.5
 
   for c in range(3):
     delta.data[:,c,:,:] = (delta.data[:,c,:,:] - Imagenet_mean[c]) / Imagenet_stddev[c]
