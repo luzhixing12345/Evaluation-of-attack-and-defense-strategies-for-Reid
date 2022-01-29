@@ -45,7 +45,7 @@ class adversary_defense:
         optimizer = DefaultTrainer.build_optimizer(self.cfg, self.model)
         loss_fun = nn.CrossEntropyLoss()
 
-        EPOCH = 3
+        EPOCH = 2
         max_id = 2000
         alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
         frequency = 800 
@@ -65,8 +65,8 @@ class adversary_defense:
                 if id>max_id:
                     break
                 target = data['targets'].to(device)
-                with torch.no_grad():
-                    images = torch.div(data['images'],255).to(device)
+                
+                images = torch.div(data['images'],255).to(device)
                     
                 self.model.heads.MODE = 'C'
                 adv_images = attack_method(images,target)
@@ -75,18 +75,14 @@ class adversary_defense:
                     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
                 self.model.heads.MODE = 'C'
                 
-                images = images.clone().detach()
-                adv_images = adv_images.clone().detach()
-                images.requires_grad_()
-                adv_images.requires_grad_()
-                
+                self.model.heads.MODE = 'FC'
                 output_clean = self.model(images)
                 output_dirty = self.model(adv_images)
                 
-                loss_clean = loss_fun(output_clean,target)
-                loss_dirty = loss_fun(output_dirty,target)
+                loss_clean = self.model.losses(output_clean,target)
+                loss_dirty = self.model.losses(output_dirty,target)
 
-                loss = loss_clean*alpha+loss_dirty*(1-alpha)
+                loss = sum(loss_clean.values())*alpha+sum(loss_dirty.values())*(1-alpha)
                 loss_total+=loss.item()
                 optimizer.zero_grad()
                 loss.backward()

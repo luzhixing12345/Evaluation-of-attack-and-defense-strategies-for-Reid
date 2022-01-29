@@ -59,11 +59,8 @@ def GOAT(cfg,train_data_loader):
         for index, data in enumerate(train_data_loader):
             if index>max_epoch:
                 break
-            with torch.no_grad():
-                inputs_clean = torch.div(data['images'],255).to(device)
-                
-            inputs_clean = inputs_clean.clone().detach()
-            inputs_clean.requires_grad_()
+            
+            inputs_clean = torch.div(data['images'],255).to(device)
             labels = data['targets'].to(device)       
                 
             model.heads.MODE = 'F'
