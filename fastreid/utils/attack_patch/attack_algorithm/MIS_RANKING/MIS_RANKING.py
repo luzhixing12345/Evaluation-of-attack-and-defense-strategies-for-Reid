@@ -45,7 +45,7 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
   model.to(device)
 
-  check_freezen(model, need_modified=True, after_modified=False)
+  #check_freezen(model, need_modified=True, after_modified=False)
 
   G = Generator(3, 3, 32, norm='bn').apply(weights_init)
   #G = ResnetG(3,3,32).apply(weights_init)
@@ -100,11 +100,8 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
   for batch_idx, data in enumerate(trainloader):
     if batch_idx>4000:
       break
-    with torch.no_grad():
-      imgs = (data['images']/255).to(device)
-      
-    imgs = imgs.clone().detach()
-    imgs.requires_grad_()
+    
+    imgs = torch.div(data['images'],255).to(device)
     pids = data['targets'].to(device)
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
 

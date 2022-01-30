@@ -28,7 +28,7 @@ def GOAT(cfg,train_data_loader):
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
 
     max_epoch = 2000
-    EPOCH = 3
+    EPOCH = 5
     frequency = 800
     loss_fun = nn.CrossEntropyLoss()
     
