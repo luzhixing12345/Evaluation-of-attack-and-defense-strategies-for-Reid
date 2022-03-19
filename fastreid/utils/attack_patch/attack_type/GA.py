@@ -79,10 +79,10 @@ class GalleryAttack:
         self.gallery_camids = camids[self.num_query:]
         self.gallery_features = features[self.num_query:]
 
-        # self.dist = build_dist(self.query_features, self.gallery_features, self.cfg.TEST.METRIC)
+        self.dist = build_dist(self.query_features, self.gallery_features, self.cfg.TEST.METRIC)
 
-        # self.indices = np.argsort(self.dist, axis=1)
-        # self.matches = (self.gallery_pids[self.indices] == self.query_pids[:, np.newaxis]).astype(np.int32)#3368x15913
+        self.indices = np.argsort(self.dist, axis=1)
+        self.matches = (self.gallery_pids[self.indices] == self.query_pids[:, np.newaxis]).astype(np.int32)#3368x15913
 
         if self.cfg.ATTACKMETHOD=='SSAE':
             self.SSAE_generator = make_SSAE_generator(self.cfg,self.model,pretrained=self.pretrained)
