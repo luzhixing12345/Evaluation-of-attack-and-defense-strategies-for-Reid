@@ -44,12 +44,11 @@ class MUAP:
         self.cfg = cfg
         self.model = model
         self.model.eval()
-        self.model
         self.scale_rate = 0.8
         self.radiu = 10
         self.EPOCH = 500
-        mean = np.array(cfg.MODEL.PIXEL_MEAN)/255.0
-        std  = np.array(cfg.MODEL.PIXEL_STD)/255.0
+        mean = np.array(cfg.MODEL.PIXEL_MEAN)
+        std  = np.array(cfg.MODEL.PIXEL_STD)
         self.normalize_transform = T.Normalize(mean=mean, std=std)
         self.g = torch.tensor([0.])
         self.pre_sat = 1.
@@ -61,15 +60,15 @@ class MUAP:
     def __call__(self, images,target):
         if len(images.shape)==5:
             return self.GA(images,target)
-        b,c,h,w = images.shape
+        
         images = images.to(device)
-        attack_img = Variable(torch.rand(c, h, w), requires_grad=True)*1e-6
-
+        attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+        attack_img.to(device)
+        
         loss = 0
         for epoch in range(self.EPOCH):
-            attack_img = attack_img.clone().detach().to(device)
-            attack_img.requires_grad_()
             
+            attack_img = Variable(attack_img, requires_grad=True)
             median_img = torch.add(images,self.normalize_transform(attack_img).to(device)).to(device)   #mix attack img and clean img
             
             feat = self.model(images)
@@ -92,27 +91,34 @@ class MUAP:
             if avg_loss < self.pre_loss:
                 best_attack = attack_img
                 self.pre_loss = avg_loss
-        
+            
+
         images = torch.add(images,best_attack.to(device))
         return images
     
     def GA(self,images,target):
 
 
-        _,N,c,h,w = images.shape
-
+        size,N,_,_,_ = images.shape
+    
         new_images = []
         for i in range(N):
-            self.pre_loss = np.inf
-            img = images[:,i,:,:,:].to(device)
-            attack_img = Variable(torch.rand(c, h, w), requires_grad=True)*1e-6
+            img = images[:,i,:,:,:]
+            img = img.to(device)
+            attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+            attack_img.to(device)
+            
             loss = 0
+            self.pre_loss = np.inf
+            self.g = torch.tensor([0.])
+            self.pre_sat = 1.
+            
             for epoch in range(self.EPOCH):
-                attack_img = attack_img.clone().detach().to(device)
-                attack_img.requires_grad_()
-
-                median_img = torch.add(img,self.normalize_transform(attack_img).to(device)).to(device)   #mix attack img and clean img
-
+                attack_img = Variable(attack_img, requires_grad=True)
+                attack_img.to(device)
+                
+                median_img = torch.add(img,self.normalize_transform(attack_img).to(device)).to(device)    #mix attack img and clean img
+                
                 feat = self.model(img)
                 attack_feat = self.model(median_img)
             
@@ -126,7 +132,7 @@ class MUAP:
                 attack_grad = attack_img.grad.data
                 attack_img, sat, self.g = attack_update(attack_img, attack_grad, self.pre_sat, self.g, self.scale_rate,epoch,self.radiu)
                 self.pre_sat = sat
-
+                
                 loss += total_loss
                 avg_loss = loss/(epoch+1)
 
@@ -134,12 +140,13 @@ class MUAP:
                     best_attack = attack_img
                     self.pre_loss = avg_loss
 
-            image = torch.add(img,best_attack.to(device))
-            new_images.append(image)
+            img = torch.add(img,best_attack.to(device))
+            new_images.append(img)
         
         new_images = torch.stack(new_images)
         new_images = new_images.permute(1,0,2,3,4)
         return new_images
+
 
 
 

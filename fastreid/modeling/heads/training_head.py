@@ -12,7 +12,7 @@ from torch import nn
 from fastreid.config import configurable
 from fastreid.layers import *
 from fastreid.layers import pooling, any_softmax
-from fastreid.utils.weight_init import weights_init_kaiming
+from fastreid.utils.weight_init import weights_init_classifier, weights_init_kaiming
 from .build import REID_HEADS_REGISTRY
 
 @REID_HEADS_REGISTRY.register()
@@ -73,7 +73,9 @@ class TrainingHead(nn.Module):
                                                "but got {}".format(any_softmax.__all__, cls_type)
         self.weight = nn.Parameter(torch.normal(0, 0.01, (num_classes, feat_dim)))
         self.cls_layer = getattr(any_softmax, cls_type)(num_classes, scale, margin)
-
+        # self.cls_layer = nn.Linear(feat_dim,num_classes,bias=False)
+        # self.cls_layer.apply(weights_init_classifier)
+        
     @classmethod
     def from_config(cls, cfg):
         # fmt: off
@@ -112,17 +114,16 @@ class TrainingHead(nn.Module):
 
         # Evaluation
         # fmt: off
-        #if not self.training: return neck_feat
+        if self.MODE == 'F': return neck_feat
         # fmt: on
-        if self.MODE == 'F':
-            return neck_feat
         # Training
         if self.cls_layer.__class__.__name__ == 'Linear':
             logits = F.linear(neck_feat, self.weight)
         else:
             logits = F.linear(F.normalize(neck_feat), F.normalize(self.weight))
-
+        
         cls_outputs = self.cls_layer(logits, targets)
+        
 
         # fmt: off
         if self.neck_feat == 'before':  feat = pool_feat[..., 0, 0]
@@ -131,7 +132,7 @@ class TrainingHead(nn.Module):
         # fmt: on
 
         if self.MODE == 'C':
-            return cls_outputs
+            return logits*self.cls_layer.s
         else:
             return {
             "cls_outputs": cls_outputs,

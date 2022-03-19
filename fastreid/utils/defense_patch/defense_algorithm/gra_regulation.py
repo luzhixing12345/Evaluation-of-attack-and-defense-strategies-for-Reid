@@ -3,7 +3,7 @@
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_train, get_result, get_train_set
+from fastreid.utils.reid_patch import eval_test, eval_train, get_result, get_train_set
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
@@ -21,36 +21,38 @@ def gradient_regulation(cfg,train_data_loader):
     model.to(device)
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
+    #optimizer = optim.Adam(model.parameters(),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5)
+    #optimizer = optim.SGD(model.parameters(),lr=0.00001,weight_decay=1e-5)
     
     loss_fun = nn.CrossEntropyLoss()
     loss_calcuation = InputGradRegLoss(weight = 500.0,criterion = loss_fun,norm = 'L2')
-    max_id = 2000
+    max_id = 1000
     EPOCH = 3
-    model.heads.MODE = 'C'
-    for _,parm in enumerate(model.parameters()):
-        parm.requires_grad=True
-    print('all parameters of model requires_grad')
+    
+    eval_train(model,train_data_loader)
 
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start epoch {epoch} for gradient regulation defense')
         model.train()
+        model.heads.MODE = 'C'
         time_stamp_start = time.strftime("%H:%M:%S", time.localtime()) 
         for batch_idx,data in enumerate(train_data_loader):
             if batch_idx>max_id :
                 break
-            with torch.no_grad():
-                clean_data = torch.div(data['images'],255).to(device)
-            clean_data = clean_data.clone().detach()
-            clean_data.requires_grad_()
+            clean_data = data['images'].to(device)
             targets = data['targets'].to(device)
+            
+            clean_data = clean_data.requires_grad_()
+            optimizer.zero_grad()
             logits = model(clean_data)
             loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
             loss_total+=loss.item()
-            optimizer.zero_grad()
+            
             loss.backward()
             optimizer.step()
         eval_train(model,train_data_loader)
+        eval_test(cfg,model,epoch)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 

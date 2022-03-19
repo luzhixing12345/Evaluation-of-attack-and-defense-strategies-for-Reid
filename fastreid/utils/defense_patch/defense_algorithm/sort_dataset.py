@@ -47,7 +47,6 @@ def sort_datasets(datasets_name):
     idx = defaultdict(list)
     for image,label in sorted_dataset:
         idx[label].append(image)
-        print(image.max())
     
     return idx
         

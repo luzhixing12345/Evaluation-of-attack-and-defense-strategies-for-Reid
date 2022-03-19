@@ -1,6 +1,10 @@
 
 
 import copy
+
+from numpy import True_
+
+from fastreid.utils.reid_patch import get_result
 from .defense_algorithm import *
 from ..attack_patch.attack_process import attack
 from tabulate import tabulate
@@ -14,17 +18,18 @@ class defense:
     def __init__(self,cfg) -> None:
         self.cfg = cfg
         self.initalization()
-        self.UseAttack = self.cfg.ATTACKTYPE!=''
+        self.QA_attack = self.cfg.ATTACKTYPE=='QA'
+        self.GA_attack = self.cfg.ATTACKTYPE=='GA'
         self.pretrained = self.cfg.DEFENSEPRETRAINED
         
-
     def initalization(self):
         dict = {
             'ADV':adversary_defense,
             'GOAT':goat_defense,
             'EST':robrank_defense,
             'SES':robrank_defense,
-            'GRA':gradient_regulation_defense
+            'GRA':gradient_regulation_defense,
+            'DIS':distillation_defense
         }
         if self.cfg.DEFENSEMETHOD == 'ADV':
             self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT = f'./model/{self.cfg.DEFENSEMETHOD}_{self.cfg.ATTACKMETHOD}_{self.cfg.DATASETS.NAMES[0]}_{self.cfg.CFGTYPE}.pth'
@@ -40,25 +45,32 @@ class defense:
         else:
             self.DefenseProcess.defense()
         
-        if self.UseAttack:
-            self.cfg.defrost()
-            self.cfg.MODEL.WEIGHTS = self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT
-            self.cfg.freeze()
+        # if self.QA_attack:
+        #     self.cfg.defrost()
+        #     self.cfg.MODEL.WEIGHTS = self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT
+        #     self.cfg.freeze()
 
-            self.AttackProcess = attack(self.cfg)
-            self.AttackProcess.start_attack()
+        #     self.AttackProcess = attack(self.cfg)
+        #     self.AttackProcess.start_attack()
 
     def get_result(self):
         def_result =  self.DefenseProcess.get_defense_result()
         self.print_csv_format(def_result)
         def_att_result = None
-        def_SSIM = None
+        def_SSIM = 0
+           
+        if self.QA_attack:
+            def_att_result = get_result(self.cfg,self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT,'attack')
+        if self.GA_attack:
+            self.AttackProcess = attack(self.cfg)
+            self.AttackProcess.GA_preprocess()
+            self.AttackProcess.AttackProcess.attack(defense_type=True)
+            self.AttackProcess.get_result()
+        # if self.QA_attack:
+        #     def_att_result,def_SSIM= self.AttackProcess.get_result()
+        #     self.print_csv_format(def_att_result)
         
-        if self.UseAttack:
-            def_att_result,def_SSIM= self.AttackProcess.get_result()
-            self.print_csv_format(def_att_result)
-        
-            print('def-SSIM = ',def_SSIM)
+            # print('def-SSIM = ',def_SSIM)
         return def_result,def_att_result,def_SSIM
 
     def print_csv_format(self,results):

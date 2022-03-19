@@ -51,7 +51,7 @@ Each result will be saved in an excel in the root path as `./result.xlsx`. Excep
 ## examples
 basic format for train
 ```bash
-python3 tools/train_net.py --config-file ./configs/DATASETS/FILE -train 
+python3 tools/train_net.py --config-file ./configs/DATASETS/FILE --train 
 ```
 basic format for attack and defense
 ```bash

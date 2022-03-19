@@ -41,11 +41,10 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
 
   cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
   model = DefaultTrainer.build_model_main(cfg)  # use baseline_train
-  model.RESIZE = True
   Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
   model.to(device)
 
-  #check_freezen(model, need_modified=True, after_modified=False)
+  check_freezen(model, need_modified=True, after_modified=False)
 
   G = Generator(3, 3, 32, norm='bn').apply(weights_init)
   #G = ResnetG(3,3,32).apply(weights_init)
@@ -53,8 +52,8 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   #D = Pat_Discriminator(input_nc=6).apply(weights_init)
   check_freezen(G, need_modified=True, after_modified=True)
   check_freezen(D, need_modified=True, after_modified=True)
-  optimizer_G = optim.Adam(G.parameters(), lr=0.002, betas=(0.5, 0.999))
-  optimizer_D = optim.Adam(D.parameters(), lr=0.002, betas=(0.5, 0.999))
+  optimizer_G = optim.Adam(G.parameters(), lr=0.0002, betas=(0.5, 0.999))
+  optimizer_D = optim.Adam(D.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
   model.to(device)
   G.to(device)
@@ -63,11 +62,9 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
 
   
-  EPOCH = 20
+  EPOCH = 10
   SSIM = 0
   if not pretrained:
-    # G.load_state_dict(torch.load(G_save_pos))
-    # D.load_state_dict(torch.load(D_save_pos))
     for epoch in range(EPOCH):
       ssim = train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, optimizer_G, optimizer_D, train_set,ak_type)
       print(f'average ssim in epoch {epoch} is {ssim}')
@@ -101,7 +98,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     if batch_idx>4000:
       break
     
-    imgs = torch.div(data['images'],255).to(device)
+    imgs = data['images'].to(device)
     pids = data['targets'].to(device)
     new_imgs, mask = perturb(imgs, G, D, cfg,train_or_test='train')
 
@@ -139,7 +136,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
 
     global_loss = DeepSupervision(metric_criterion, new_features, pids, targets) if isinstance(new_features, (tuple, list)) else metric_criterion(new_features, pids, targets)
     
-    loss_G_ReID = (xent_loss+ global_loss)*10
+    loss_G_ReID = (xent_loss+ global_loss)*2
 
     from .util.ms_ssim import msssim
     loss_func = msssim
@@ -149,17 +146,16 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
     ############## Backward #############
-        # update discriminator weights
-    optimizer_D.zero_grad()
-    loss_D.backward(retain_graph=True)
-    
     # update generator weights
     optimizer_G.zero_grad()
-    #loss_G.backward(retain_graph=True)
+    # loss_G.backward(retain_graph=True)
     loss_G.backward()
-    optimizer_D.step()
     optimizer_G.step()
-
+    # update discriminator weights
+    optimizer_D.zero_grad()
+    loss_D.backward()
+    optimizer_D.step()
+    
 
     loss_G_total+=loss_G.item()
     loss_D_total+=loss_D.item()
@@ -189,8 +185,8 @@ def perturb(imgs, G, D, cfg,train_or_test='test'):
 
 def L_norm(cfg,delta, mode='train'):
 
-  # delta.data += 1 
-  # delta.data *= 0.5
+  delta.data += 1 
+  delta.data *= 0.5
 
   for c in range(3):
     delta.data[:,c,:,:] = (delta.data[:,c,:,:] - Imagenet_mean[c]) / Imagenet_stddev[c]
@@ -237,7 +233,6 @@ class generator:
       img = images[:,i,:,:,:]
       with torch.no_grad():
         new_imgs, _,_ = perturb(img, self.G, self.D,self.cfg, train_or_test='test')
-      new_imgs = new_imgs/255.0
       new_imgs = torch.clamp(new_imgs, min=0., max=1.)
       new_images.append(new_imgs)
     

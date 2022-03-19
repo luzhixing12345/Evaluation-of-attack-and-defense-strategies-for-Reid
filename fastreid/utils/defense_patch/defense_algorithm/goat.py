@@ -4,12 +4,11 @@
 import torch
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from collections import defaultdict
 import torch.nn as nn
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.advertorch.attacks import PGDAttack
-from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict, pairwise_distance
+from fastreid.utils.reid_patch import eval_ssim, eval_test, eval_train, get_result, get_train_set, make_dict, pairwise_distance
 import numpy as np
 import time
 from .sort_dataset import sort_datasets
@@ -20,37 +19,37 @@ def GOAT(cfg,train_data_loader):
 
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)
-    model.RESIZE = True
     
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
     model.to(device)
 
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=0.00035, weight_decay=5e-4)
 
     max_epoch = 2000
     EPOCH = 5
     frequency = 800
-    loss_fun = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
+    #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
     # model.train()
     # for _,parm in enumerate(model.parameters()):
     #     parm.requires_grad=True
     # print('all parameters of model requires_grad')
-    request_dict = defaultdict(list)
-    train_batch_size = cfg.SOLVER.IMS_PER_BATCH
-    N = 18000//train_batch_size
-    for idx,data in enumerate(train_data_loader):
-        if idx>N:
-            break
-        images = (data['images']/255).cpu()
-        labels = data['targets'].cpu()
-        for img,label in zip(images,labels):
-            request_dict[label.item()].append(img)
+    request_dict = sort_datasets(cfg.DATASETS.NAMES[0])
+    # train_batch_size = cfg.SOLVER.IMS_PER_BATCH
+    # N = 18000//train_batch_size
+    # for idx,data in enumerate(train_data_loader):
+    #     if idx>N:
+    #         break
+    #     images = data['images'].cpu()
+    #     labels = data['targets'].cpu()
+    #     for img,label in zip(images,labels):
+    #         request_dict[label.item()].append(img)
         
-        if idx%100==0:
-            print(len(request_dict.keys()))
+    #     if idx%100==0:
+    #         print(len(request_dict.keys()))
     
-    eval_train(model,train_data_loader)
     for epoch in range(EPOCH):
         loss_total = 0
         print(f'start training for epoch {epoch} of {EPOCH}')
@@ -60,7 +59,7 @@ def GOAT(cfg,train_data_loader):
             if index>max_epoch:
                 break
             
-            inputs_clean = torch.div(data['images'],255).to(device)
+            inputs_clean = data['images'].to(device)
             labels = data['targets'].to(device)       
                 
             model.heads.MODE = 'F'
@@ -68,19 +67,25 @@ def GOAT(cfg,train_data_loader):
             if index % frequency ==0:
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
+            model.heads.MODE = 'C'
             # zero the parameter gradients
-            model.heads.MODE = 'FC'
-            outputs = model(adv_images)
-            #loss_dict =model.losses(outputs, labels)
-            loss_dict = model.losses(outputs,labels)
-            loss = sum(loss_dict.values())
-            #loss = loss_fun(outputs,labels)
-            
+            adv_images = adv_images.clone().detach()
+            adv_images.requires_grad_()
             optimizer.zero_grad()
+            outputs = model(adv_images)
+            #loss_dict = model.losses(outputs,labels)
+            #loss = sum(loss_dict.values())
+            # dist = pairwise_distance(outputs, outputs)
+            # dist_ap, dist_an, list_triplet = get_distances(dist, labels)
+            # y = torch.ones(dist_ap.size(0)).to(device)
+            # loss = criterion(dist_an, dist_ap, y)
+            loss = criterion(outputs,labels)
             loss_total+=loss.item()
+                
             loss.backward()
-            optimizer.step()
+            optimizer.step()   
         eval_train(model,train_data_loader)
+        eval_test(cfg,model,epoch)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
 

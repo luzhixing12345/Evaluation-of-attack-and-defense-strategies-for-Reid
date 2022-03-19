@@ -29,6 +29,9 @@ class attack:
     def start_attack(self):
         self.AttackProcess.attack()
 
+    def GA_preprocess(self):
+        self.AttackProcess.GA_preprocess()
+
     def get_result(self):
         return self.AttackProcess.get_result()
 

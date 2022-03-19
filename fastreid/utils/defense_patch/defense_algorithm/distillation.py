@@ -1,8 +1,9 @@
 import torch 
 import torch.nn as nn
+import torch.nn.functional as F
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_train, get_result, get_train_set
+from fastreid.utils.reid_patch import eval_test, eval_train, get_result, get_train_set
 device='cuda'
 
 
@@ -12,43 +13,78 @@ def distillation(cfg,train_data_loader):
 
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)  #启用baseline_for_defense
+    model.RESIZE = True
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
-
-    print(eval_train(model,train_data_loader,4000))
-    torch.nn.init.xavier_normal_(model.heads.classifier.weight)
+    
     #optimizer = optim.Adam(model.parameters(),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5)
     #optimizer = optim.SGD(model.parameters(),lr=0.00001,weight_decay=1e-5) # for bot_r50
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
     
-    loss_fun = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
     softmax = nn.Softmax(dim=1)
     T = 100  #distillation temperature
-    model.train()
+    max_epoch = 1000
+    EPOCH = 3
     
-    for i in range(5):
+    for epoch in range(EPOCH):
         loss_total = 0
+        model.train()
+        model.heads.MODE = 'C'
         for batch_idx,data in enumerate(train_data_loader):
-            if batch_idx>4000:
+            if batch_idx>max_epoch:
                 break
             clean_data = data['images'].to(device)
             targets = data['targets'].to(device)
         
             optimizer.zero_grad()
             logits = model(clean_data)
-
-            loss = loss_fun(logits/T,targets)
+            
+            loss = criterion(logits/T,targets)
+            
             loss_total+=loss.item()
             loss.backward()
             optimizer.step()
-        accurency = eval_train(model,train_data_loader,1000)
-        print('The accurency of query set in Train Epoch {} is {}%'.format(i,accurency))
-
         print('loss_total = ',loss_total)
     
-    Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
-
+    distillation_labels = []
+    
+    for batch_idx,data in enumerate(train_data_loader):
+        if batch_idx>max_epoch:
+            break
+        clean_data = data['images'].to(device)
+        with torch.no_grad():
+            outputs = softmax(model(clean_data))
+            softlabels = outputs.argmax(dim=1)
+        distillation_labels.append(softlabels)
+    
+    model_dis = DefaultTrainer.build_model_main(cfg)  #启用baseline_for_defense
+    Checkpointer(model_dis).load(cfg.MODEL.WEIGHTS)  # load trained model
+    optimizer_dis = DefaultTrainer.build_optimizer(cfg, model_dis)
+    model_dis.train()
+    model_dis.heads.MODE = 'C'
+    for epoch in range(EPOCH):
+        loss_total = 0
+        model_dis.heads.MODE = 'C'
+        for batch_idx,data in enumerate(train_data_loader):
+            if batch_idx>max_epoch:
+                break
+            clean_data = data['images'].to(device)
+            targets = distillation_labels[batch_idx]
+        
+            optimizer_dis.zero_grad()
+            logits = model_dis(clean_data)
+            loss = criterion(logits,targets)
+            
+            loss_total+=loss.item()
+            loss.backward()
+            optimizer.step()
+        eval_train(model_dis,train_data_loader)
+        eval_test(cfg,model,epoch)
+        print('loss_total = ',loss_total)
+    
+    
     print('finished dstillation_training !')
-    Checkpointer(model,'model').save('def_trained')
+    Checkpointer(model_dis,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}')
     print('Successfully saved the distill_trained model !')
 
 

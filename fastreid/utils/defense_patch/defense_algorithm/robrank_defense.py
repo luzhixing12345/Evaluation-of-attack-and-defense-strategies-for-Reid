@@ -8,9 +8,10 @@ import torch
 import numpy as np
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
-from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
+from fastreid.utils.reid_patch import eval_ssim, eval_test, eval_train, get_result, get_train_set, make_dict
 from .robrank import *
 import time
+from torch import optim
 margin_cosine: float = 0.2
 margin_euclidean: float = 1.0
 device = 'cuda'
@@ -30,7 +31,7 @@ def RobRank_defense(cfg,train_set,str):
     if str =='SES':
         train_step = SES_training_step
     elif str == 'EST':
-        train_step = EST_training_step
+        train_step = EST_training_step   
     elif str == 'ACT':
         train_step = ACT_training_step
     else:
@@ -38,15 +39,13 @@ def RobRank_defense(cfg,train_set,str):
 
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_set.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)#this model was used for later evaluations
-    model.RESIZE = True
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)
 
     optimizer = DefaultTrainer.build_optimizer(cfg,model)
+    #optimizer = optim.Adam(model.parameters(),lr=0.001,betas=(0.9,0.999),eps=1e-08,weight_decay=1e-5)
+    
     max_id = 2000
     EPOCH = 3
-    for _,parm in enumerate(model.parameters()):
-        parm.requires_grad=True
-    print('all parameters of model requires_grad')
  
     for epoch in range(EPOCH):
         model.train()
@@ -56,18 +55,18 @@ def RobRank_defense(cfg,train_set,str):
         for id,data in enumerate(train_set):
             if id>max_id:
                 break
-            with torch.no_grad():
-                images = torch.div(data['images'],255.0).to(device)
-                
+            images = data['images'].to(device)
             labels = data['targets'].to(device)
+            
             #model.heads.MODE = 'F'
             loss = train_step(model,images,labels,id)
             
-            loss_total+=loss
+            loss_total+=loss.item()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         eval_train(model,train_set)
+        eval_test(cfg,model,epoch)
         time_stamp_end = time.strftime("%H:%M:%S", time.localtime()) 
         print(f'total_loss for epoch {epoch} of {EPOCH} is {loss_total} | {time_stamp_start} - {time_stamp_end}')
     
@@ -108,8 +107,7 @@ def EST_training_step(model, images, labels,id):
     model.train()
     model.heads.MODE = 'FC'
     output = model(advimgs)
-    loss_dict = model.losses(output,labels)
-    loss = sum(loss_dict.values())
+    loss = model.losses(output,labels)
     return loss
 
 def mmt_training_step(model: torch.nn.Module, images,labels,id):
@@ -232,22 +230,19 @@ def SES_training_step(model, images,labels,id):
     advimgs = advrank.embShift(images)
     model.train()
     
-    # advimgs = advimgs.clone().detach()
-    # advimgs.requires_grad_()
-    # images = images.clone().detach()
-    # images.requires_grad_()
-    
     # evaluate advtrain loss
     output_adv = model(advimgs)
     model.heads.MODE = 'FC'
     output_orig = model(images)
+    
     loss_orig = model.losses(output_orig, labels)
+    
     nori = F.normalize(output_orig['features'])
     nadv = F.normalize(output_adv)
     embshift = F.pairwise_distance(nadv, nori)
     # loss and log
     # method 1: loss_triplet + loss_embshift
-    loss = sum(loss_orig.values()) + 1.0 * embshift.mean()
+    loss = loss_orig + 1.0 * embshift.mean()
     # method 2: loss_triplet + loss_embshiftp2
     #loss = loss_orig + 1.0 * (embshift ** 2).mean()
 

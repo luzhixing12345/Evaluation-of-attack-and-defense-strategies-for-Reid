@@ -267,7 +267,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
     mse_loss = nn.MSELoss(reduction='sum').to(device)
     loss_total = 0
 
-    EPOCHS = 20
+    EPOCHS = 10
     delta = 0.1
     alpha = 0.0001
     model.eval()
@@ -283,7 +283,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 if batch_idx>4000:
                     break
                 
-                raw_imgs= (data['images']/255.0).to(device)
+                raw_imgs= data['images'].to(device)
                 # perturb images
                 
                 perturbations, saliency_map = generator(raw_imgs)
@@ -320,7 +320,7 @@ def make_SSAE_generator(cfg,model,pretrained=False):
                 if batch_idx>4000:
                     break
                 
-                raw_imgs= (data['images']/255.0).to(device)
+                raw_imgs= data['images'].to(device)
                 # perturb images
                 
                 perturbations, saliency_map = generator(raw_imgs)

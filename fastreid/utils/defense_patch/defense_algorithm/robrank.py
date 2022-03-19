@@ -636,17 +636,6 @@ class AdvRank:
 
         # evaluate adversarial samples
         xr = images.clone().detach()
-        if self.verbose:
-            r = images - images_orig
-            with torch.no_grad():
-                output = self.forwardmetric(images)
-                # also calculate embedding shift
-                if self.metric == 'C':
-                    embshift = (1 - F.cosine_similarity(output, output_orig)
-                                ).mean().item()
-                elif self.metric in ('E', 'N'):
-                    embshift = F.pairwise_distance(output, output_orig
-                                                   ).mean().item()
         return xr
 
 class QCSelector(object):

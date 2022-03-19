@@ -2,6 +2,7 @@ import time
 from sklearn.feature_extraction import image
 import torch.nn as nn
 import torch
+import copy
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
 from fastreid.utils.reid_patch import eval_ssim, eval_train, get_result, get_train_set, make_dict
@@ -43,13 +44,12 @@ class adversary_defense:
         attack_method = self.getAttackMethod()
 
         optimizer = DefaultTrainer.build_optimizer(self.cfg, self.model)
-        loss_fun = nn.CrossEntropyLoss()
 
-        EPOCH = 2
+        EPOCH = 3
         max_id = 2000
         alpha = 0.5 # mixing ratio between clean data and attack data,and it represents the ratio of clean data
         frequency = 800 
-        #loss_fun = nn.CrossEntropyLoss()
+        loss_fun = nn.CrossEntropyLoss()
 
         # self.model.train()
         # for _,parm in enumerate(self.model.parameters()):
@@ -65,26 +65,26 @@ class adversary_defense:
                 if id>max_id:
                     break
                 target = data['targets'].to(device)
-                
-                images = torch.div(data['images'],255).to(device)
+                images = data['images'].to(device)
                     
+                
                 self.model.heads.MODE = 'C'
                 adv_images = attack_method(images,target)
                 
                 if id % frequency==0:
                     print(f'ssim = {eval_ssim(images,adv_images)} in epoch {epoch} of {id}')
-                self.model.heads.MODE = 'C'
                 
-                self.model.heads.MODE = 'FC'
+                #self.model.heads.MODE = 'FC'
                 output_clean = self.model(images)
                 output_dirty = self.model(adv_images)
                 
-                loss_clean = self.model.losses(output_clean,target)
-                loss_dirty = self.model.losses(output_dirty,target)
+                loss_clean = loss_fun(output_clean,target)
+                loss_dirty = loss_fun(output_dirty,target)
 
-                loss = sum(loss_clean.values())*alpha+sum(loss_dirty.values())*(1-alpha)
-                loss_total+=loss.item()
                 optimizer.zero_grad()
+                loss = loss_clean*alpha+loss_dirty*(1-alpha)
+                loss_total+=loss.item()
+                
                 loss.backward()
                 optimizer.step()
             eval_train(self.model,self.train_set)
@@ -106,14 +106,16 @@ class adversary_defense:
 
         eps=0.05
         eps_iter=1.0/255.0
+        
+        origin_model = copy.deepcopy(self.model)
         dict = {
-            'FGSM'    :FGSM  (self.cfg,self.model, loss_fn, eps=eps, targeted=False),
-            'IFGSM'   :IFGSM (self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),
-            'MIFGSM'  :MIFGSM(self.cfg,self.model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,decay_factor=1),
-            'ODFA'    :ODFA  (self.cfg,self.model, odfa,eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
+            'FGSM'    :FGSM  (self.cfg,origin_model, loss_fn, eps=eps, targeted=False),
+            'IFGSM'   :IFGSM (self.cfg,origin_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,rand_init=False),
+            'MIFGSM'  :MIFGSM(self.cfg,origin_model, loss_fn, eps=eps, eps_iter=eps_iter,targeted=False,decay_factor=1),
+            'ODFA'    :ODFA  (self.cfg,origin_model, odfa,eps=eps, eps_iter=eps_iter,targeted=True,rand_init=False),
             'SSAE'    :self.SSAE_generator,
             'MISR'    :self.MISR_generator,
-            'MUAP'    :MUAP(self.cfg,self.model)
+            'MUAP'    :MUAP(self.cfg,origin_model)
         }
         return dict[self.cfg.ATTACKMETHOD]
 

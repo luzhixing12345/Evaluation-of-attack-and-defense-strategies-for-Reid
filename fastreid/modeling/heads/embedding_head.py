@@ -4,7 +4,6 @@
 @contact: sherlockliao01@gmail.com
 """
 
-import math
 
 import torch
 import torch.nn.functional as F
@@ -13,9 +12,8 @@ from torch import nn
 from fastreid.config import configurable
 from fastreid.layers import *
 from fastreid.layers import pooling, any_softmax
-from fastreid.utils.weight_init import weights_init_kaiming
+from fastreid.utils.weight_init import weights_init_classifier, weights_init_kaiming
 from .build import REID_HEADS_REGISTRY
-
 
 @REID_HEADS_REGISTRY.register()
 class EmbeddingHead(nn.Module):
@@ -131,8 +129,9 @@ class EmbeddingHead(nn.Module):
             logits = F.linear(neck_feat, self.weight)
         else:
             logits = F.linear(F.normalize(neck_feat), F.normalize(self.weight))
-
+        
         cls_outputs = self.cls_layer(logits, targets)
+        
 
         # fmt: off
         if self.neck_feat == 'before':  feat = pool_feat[..., 0, 0]

@@ -43,7 +43,7 @@ class CommDataset(Dataset):
             pid = self.pid_dict[pid]
             camid = self.cam_dict[camid]
         return {
-            "images": img,
+            "images": img/255,
             "targets": pid,
             "camids": camid,
             "img_paths": img_path,

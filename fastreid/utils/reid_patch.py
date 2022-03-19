@@ -7,10 +7,9 @@ import skimage
 import openpyxl
 import torch
 import torch.nn as nn
-from fastreid.data.build import (build_reid_test_data_loader,
-                                 build_reid_query_data_loader,
-                                 build_reid_att_query_data_loader,
+from fastreid.data.build import (build_reid_query_data_loader,
                                  build_reid_gallery_data_loader,
+                                 build_reid_test_loader,
                                  build_reid_train_loader,)
 from fastreid.engine import DefaultTrainer
 from fastreid.solver.build import build_optimizer
@@ -23,28 +22,24 @@ device= 'cuda'
 excel_name = 'result.xlsx'
 
 Attack_algorithm_library=['FGSM','IFGSM','MIFGSM','ODFA','MISR','FNA','MUAP','SSAE']
-Defense_algorithm_library=['ADV','GOAT','EST','SES','GRA']
+Defense_algorithm_library=['ADV','GOAT','EST','SES','GRA','DIS']
 
 evaluation_indicator=['Rank-1','mAP',"TPR@FPR={:.0e}".format(1e-2)]
 evaluation_attackIndex= ['DmAP','SDSIM','AttackIndex']
 evaluation_defenseIndex =['def-SDSIM','DefenseIndex']
 attack_R_type = ['QA+','QA-','GA+','GA-']
 
-def get_query_set(cfg,relabel=True):
+def get_query_set(cfg,relabel=False):
     query_set=build_reid_query_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return query_set
 
-def get_att_query_set(cfg,relabel=True):
-    adv_query_set = build_reid_att_query_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
-    return adv_query_set
-
-def get_test_set(cfg,relabel=True):
-    test_set = build_reid_test_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
-    return test_set
-
-def get_gallery_set(cfg,relabel=True):
+def get_gallery_set(cfg,relabel=False):
     gallery_set=build_reid_gallery_data_loader(cfg,cfg.DATASETS.TESTS[0],relabel=relabel)
     return gallery_set
+
+def get_test_set(cfg):
+    test_set = build_reid_test_loader(cfg)
+    return test_set
 
 def get_train_set(cfg):
     train_data_loader = build_reid_train_loader(cfg)
@@ -61,7 +56,7 @@ def eval_train(model,data_loader,max_id=200):
     for id,data in enumerate(data_loader):
         if id>max_id:
             break
-        images = (data['images']/255).to(device)
+        images = data['images'].to(device)
         logits = model(images)
         probabilities = softmax(logits)
         pred = probabilities.argmax(dim=1,keepdim=True)
@@ -72,10 +67,18 @@ def eval_train(model,data_loader,max_id=200):
     print(f'accurency : {correct}/{n} = {100. * correct / n}%\n')
     print('*****************end-evluation*****************')
 
+def eval_test(cfg,model,epoch):
+    model.heads.MODE = 'F'
+    Checkpointer(model,'model').save(f'{cfg.DEFENSEMETHOD}_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}_{epoch}')
+    return DefaultTrainer.test(cfg,model)
+
+
+
 def eval_ssim(images1,images2):
     #print(images1.shape,images2.shape)
     size = images1.shape[0]
     SSIM = 0
+    #print(images1.max(),images2.max())
     for i in range(size):
         image1 = CHW_to_HWC(images1[i])
         image2 = CHW_to_HWC(images2[i])

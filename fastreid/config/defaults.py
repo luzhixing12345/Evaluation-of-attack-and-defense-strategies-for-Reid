@@ -58,7 +58,6 @@ _C.MODEL.BACKBONE.PRETRAIN_PATH = ''
 _C.MODEL.HEADS = CN()
 _C.MODEL.HEADS.NAME = "EmbeddingHead"
 _C.MODEL.HEADS.TRAIN = "TrainingHead"
-_C.MODEL.HEADS.FEATURE = 'FeatureHead'
 # Normalization method for the convolution layers.
 _C.MODEL.HEADS.NORM = "BN"
 # Number of identity
@@ -70,10 +69,10 @@ _C.MODEL.HEADS.WITH_BNNECK = False
 # Triplet feature using feature before(after) bnneck
 _C.MODEL.HEADS.NECK_FEAT = "before"  # options: before, after
 # Pooling layer type
-_C.MODEL.HEADS.POOL_LAYER = "avgpool"
+_C.MODEL.HEADS.POOL_LAYER = "GlobalAvgPool"
 
 # Classification layer type
-_C.MODEL.HEADS.CLS_LAYER = "linear"  # ArcSoftmax" or "CircleSoftmax"
+_C.MODEL.HEADS.CLS_LAYER = "Linear"  # ArcSoftmax" or "CircleSoftmax"
 
 # Margin and Scale for margin-based classification layer
 _C.MODEL.HEADS.MARGIN = 0.
@@ -135,9 +134,9 @@ _C.ONLYDEFENSE = False
 
 
 # Values to be used for image normalization
-_C.MODEL.PIXEL_MEAN = [0.485*255, 0.456*255, 0.406*255]
+_C.MODEL.PIXEL_MEAN = [0.485, 0.456, 0.406]
 # Values to be used for image normalization
-_C.MODEL.PIXEL_STD = [0.229*255, 0.224*255, 0.225*255]
+_C.MODEL.PIXEL_STD = [0.229, 0.224, 0.225]
 
 # -----------------------------------------------------------------------------
 # KNOWLEDGE DISTILLATION
@@ -326,4 +325,3 @@ _C.OUTPUT_DIR = "logs/"
 # for about 10k iterations. It usually hurts total time, but can benefit for certain models.
 # If input images have the same or similar sizes, benchmark is often helpful.
 _C.CUDNN_BENCHMARK = False
-

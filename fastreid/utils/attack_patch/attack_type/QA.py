@@ -27,7 +27,6 @@ class QueryAttack:
     def default_setup(self):
         
         self.model = DefaultTrainer.build_model_main(self.cfg)#this model was used for later evaluations
-        self.model.RESIZE = True
         self.model.heads.MODE = 'F'
         self.model.to(device)
         Checkpointer(self.model).load(self.cfg.MODEL.WEIGHTS)
@@ -45,7 +44,7 @@ class QueryAttack:
 
         for _,data in enumerate(test_dataset):
             with torch.no_grad():
-                features.append(self.model(data['images']/255.0).cpu())
+                features.append(self.model(data['images']).cpu())
             pids.append(data['targets'].cpu())
             camids.append(data['camids'].cpu())
         
@@ -163,7 +162,7 @@ class QueryAttack:
         self.query_data_loader = get_query_set(self.cfg)
         for q_idx ,data in enumerate(self.query_data_loader):
             
-            images = (data['images']/255.0).to(device)
+            images = data['images'].to(device)
             target = data['targets'].to(device)
             path = data['img_paths']
 

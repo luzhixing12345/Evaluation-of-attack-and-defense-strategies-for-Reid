@@ -75,7 +75,6 @@ def build_reid_train_loader(
     """
     Build a dataloader for object re-identification with some default features.
     This interface is experimental.
-
     Returns:
         torch.utils.data.DataLoader: a dataloader.
     """
@@ -124,17 +123,14 @@ def build_reid_test_loader(test_set, test_batch_size, num_query, num_workers=4):
     Similar to `build_reid_train_loader`. This sampler coordinates all workers to produce
     the exact set of all samples
     This interface is experimental.
-
     Args:
         test_set:
         test_batch_size:
         num_query:
         num_workers:
-
     Returns:
         DataLoader: a torch DataLoader, that loads the given reid dataset, with
         the test-time transformation.
-
     Examples:
     ::
         data_loader = build_reid_test_loader(test_set, test_batch_size, num_query)
@@ -188,7 +184,7 @@ def _def_advtest_loader_from_config(cfg, *, dataset_name=None, test_set=None, nu
             data.show_test()
         #test_items = data.def_adv_query + data.gallery
         test_items = data.def_adv_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=True)
+        test_set = CommDataset(test_items, transforms, relabel=False)
 
         # Update query number
         #num_query = len(data.def_adv_query)
@@ -209,7 +205,7 @@ def _def_test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_q
         if comm.is_main_process():
             data.show_test()
         test_items = data.def_query + data.gallery
-        test_set = CommDataset(test_items, transforms, relabel=True)
+        test_set = CommDataset(test_items, transforms, relabel=False)
 
         # Update query number
         #num_query = len(data.def_adv_query)
@@ -360,7 +356,7 @@ def fast_batch_collator(batched_inputs):
     elif isinstance(elem, string_classes):
         return batched_inputs
 
-def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=True,**kwargs):
+def build_reid_query_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=False,**kwargs):
     """
     Build reid query data loader
 
@@ -453,7 +449,7 @@ def build_reid_att_query_data_loader(cfg, dataset_name, mapper=None, num_workers
 
 
 
-def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel = True,**kwargs):
+def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel =False,**kwargs):
     """
     Build reid query data loader
 
@@ -497,7 +493,7 @@ def build_reid_test_data_loader(cfg, dataset_name, mapper=None, num_workers=4,re
     )
     return test_loader
 
-def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=True,**kwargs):
+def build_reid_gallery_data_loader(cfg, dataset_name, mapper=None, num_workers=4,relabel=False,**kwargs):
     """
     Build reid query data loader
 

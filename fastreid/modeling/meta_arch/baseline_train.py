@@ -98,10 +98,8 @@ class Baseline_train(nn.Module):
         return self.pixel_mean.device
 
     def forward(self, batched_inputs):
-        if self.RESIZE:
-            images = self.preprocess_image_resize1(batched_inputs)
-        else:
-            images = self.preprocess_image(batched_inputs)
+
+        images = self.preprocess_image(batched_inputs)
         features = self.backbone(images)
 
         if isinstance(batched_inputs, dict):
@@ -122,24 +120,9 @@ class Baseline_train(nn.Module):
         else:
             raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
 
-        #images = torch.sub(images,self.pixel_mean)
-        #images = torch.div(images,self.pixel_std)
-        images.sub_(self.pixel_mean).div_(self.pixel_std)
-        return images
-
-    def preprocess_image_resize1(self, batched_inputs):
-        """
-        Normalize and batch the input images.
-        """
-        if isinstance(batched_inputs, dict):
-            images = batched_inputs['images'].to(self.device)
-        elif isinstance(batched_inputs, torch.Tensor):
-            images = batched_inputs.to(self.device)
-        else:
-            raise TypeError("batched_inputs must be dict or torch.Tensor, but get {}".format(type(batched_inputs)))
-
-        images = torch.mul(images,255.0)
-        images.sub_(self.pixel_mean).div_(self.pixel_std)
+        images = torch.sub(images,self.pixel_mean)
+        images = torch.div(images,self.pixel_std)
+        #images.sub_(self.pixel_mean).div_(self.pixel_std)
         return images
 
     def losses(self, outputs, gt_labels):
@@ -197,4 +180,4 @@ class Baseline_train(nn.Module):
                 cosface_kwargs.get('gamma'),
             ) * cosface_kwargs.get('scale')
 
-        return loss_dict
+        return sum(loss_dict.values())
