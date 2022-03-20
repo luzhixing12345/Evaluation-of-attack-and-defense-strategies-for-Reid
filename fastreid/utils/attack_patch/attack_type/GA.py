@@ -268,7 +268,7 @@ class GalleryAttack:
         Checkpointer(self.model_defense).load(self.cfg.MODEL.DEFENSE_TRAINED_WEIGHT)
         
     
-    def evaluate_defense(self,q_idx,features,selected_ids,selected_images,new_selected_images):
+    def evaluate_defense(self,id,image_features,selected_ids,selected_images,new_selected_images):
         
         size,N= selected_ids.shape
         id = id*self.batch_size
@@ -297,7 +297,7 @@ class GalleryAttack:
                 #features(size) = size x 2048
                 gf[selected_ids[i][j]]=features[i]
 
-            query_features = features[i].cpu().unsqueeze(0)
+            query_features = image_features[i].cpu().unsqueeze(0)
             dist = build_dist(query_features,gf,self.cfg.TEST.METRIC)
             order = np.argsort(dist, axis=1)
             matches = (self.gallery_pids[order] == self.query_pids[q_idx]).astype(np.int32)
