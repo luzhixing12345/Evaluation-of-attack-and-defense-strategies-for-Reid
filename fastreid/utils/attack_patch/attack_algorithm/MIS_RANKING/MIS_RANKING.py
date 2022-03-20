@@ -1,11 +1,6 @@
 
 import numpy as np
-import os.path as osp
-from random import sample
 from numpy.lib.function_base import average 
-from scipy import io
-
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -62,7 +57,7 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
 
   
-  EPOCH = 10
+  EPOCH = 40
   SSIM = 0
   if not pretrained:
     for epoch in range(EPOCH):
@@ -219,6 +214,7 @@ class generator:
     if len(images.shape)==5:
         return self.GA(images)
 
+    images = images.to(device)
     new_imgs, _,_ = perturb(images, self.G, self.D,self.cfg, train_or_test='test')
 
     #new_imgs = new_imgs/255.0
@@ -230,7 +226,7 @@ class generator:
 
     new_images = []
     for i in range(N):
-      img = images[:,i,:,:,:]
+      img = images[:,i,:,:,:].to(device)
       with torch.no_grad():
         new_imgs, _,_ = perturb(img, self.G, self.D,self.cfg, train_or_test='test')
       new_imgs = torch.clamp(new_imgs, min=0., max=1.)

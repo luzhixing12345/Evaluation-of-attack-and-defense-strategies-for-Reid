@@ -1,6 +1,8 @@
 
 logs
-
+*.xlsx
+*.txt
+*.sbatch
 # compilation and distribution
 __pycache__
 _ext

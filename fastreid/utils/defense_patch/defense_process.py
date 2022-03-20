@@ -65,7 +65,7 @@ class defense:
             self.AttackProcess = attack(self.cfg)
             self.AttackProcess.GA_preprocess()
             self.AttackProcess.AttackProcess.attack(defense_type=True)
-            self.AttackProcess.get_result()
+            def_att_result = self.AttackProcess.get_result()
         # if self.QA_attack:
         #     def_att_result,def_SSIM= self.AttackProcess.get_result()
         #     self.print_csv_format(def_att_result)
