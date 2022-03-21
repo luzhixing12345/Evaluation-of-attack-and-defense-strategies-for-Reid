@@ -1,6 +1,7 @@
 
 
-
+from collections import defaultdict
+from urllib import request
 import torch
 from fastreid.engine import DefaultTrainer
 from fastreid.utils.checkpoint import Checkpointer
@@ -32,23 +33,25 @@ def GOAT(cfg,train_data_loader):
     criterion = nn.CrossEntropyLoss()
     #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
-    # model.train()
-    # for _,parm in enumerate(model.parameters()):
-    #     parm.requires_grad=True
-    # print('all parameters of model requires_grad')
-    request_dict = sort_datasets(cfg.DATASETS.NAMES[0])
-    # train_batch_size = cfg.SOLVER.IMS_PER_BATCH
-    # N = 18000//train_batch_size
-    # for idx,data in enumerate(train_data_loader):
-    #     if idx>N:
-    #         break
-    #     images = data['images'].cpu()
-    #     labels = data['targets'].cpu()
-    #     for img,label in zip(images,labels):
-    #         request_dict[label.item()].append(img)
+    model.train()
+    for _,parm in enumerate(model.parameters()):
+        parm.requires_grad=True
+    print('all parameters of model requires_grad')
+    #request_dict = sort_datasets(cfg.DATASETS.NAMES[0])
+    
+    request_dict = defaultdict(list)
+    train_batch_size = cfg.SOLVER.IMS_PER_BATCH
+    N = 18000//train_batch_size
+    for idx,data in enumerate(train_data_loader):
+        if idx>N:
+            break
+        images = data['images'].cpu()
+        labels = data['targets'].cpu()
+        for img,label in zip(images,labels):
+            request_dict[label.item()].append(img)
         
-    #     if idx%100==0:
-    #         print(len(request_dict.keys()))
+        if idx%100==0:
+            print(len(request_dict.keys()))
     
     for epoch in range(EPOCH):
         loss_total = 0
@@ -69,8 +72,8 @@ def GOAT(cfg,train_data_loader):
 
             model.heads.MODE = 'C'
             # zero the parameter gradients
-            adv_images = adv_images.clone().detach()
-            adv_images.requires_grad_()
+            # adv_images = adv_images.clone().detach()
+            # adv_images.requires_grad_()
             optimizer.zero_grad()
             outputs = model(adv_images)
             #loss_dict = model.losses(outputs,labels)

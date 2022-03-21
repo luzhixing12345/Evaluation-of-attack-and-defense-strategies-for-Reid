@@ -57,7 +57,7 @@ def make_MIS_Ranking_generator(cfg,ak_type=-1,pretrained=False):
   D_save_pos = f'./model/D_weights_{cfg.DATASETS.NAMES[0]}_{cfg.CFGTYPE}.pth.tar'
 
   
-  EPOCH = 40
+  EPOCH = 15
   SSIM = 0
   if not pretrained:
     for epoch in range(EPOCH):
@@ -164,7 +164,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
 def perturb(imgs, G, D, cfg,train_or_test='test'):
   n,c,h,w = imgs.size()
   delta = G(imgs)
-  delta = L_norm(cfg,delta, train_or_test)
+  #delta = L_norm(cfg,delta, train_or_test)
   new_imgs = torch.add(imgs.cuda(), delta[0:imgs.size(0)].cuda())
 
   _, mask = D(torch.cat((imgs, new_imgs.detach()), 1))
