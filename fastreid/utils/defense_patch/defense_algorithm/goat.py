@@ -28,15 +28,15 @@ def GOAT(cfg,train_data_loader):
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.00035, weight_decay=5e-4)
 
     max_epoch = 2000
-    EPOCH = 5
+    EPOCH = 3
     frequency = 800
-    criterion = nn.CrossEntropyLoss()
-    #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
+    #criterion = nn.CrossEntropyLoss()
+    criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
-    model.train()
-    for _,parm in enumerate(model.parameters()):
-        parm.requires_grad=True
-    print('all parameters of model requires_grad')
+    # model.train()
+    # for _,parm in enumerate(model.parameters()):
+    #     parm.requires_grad=True
+    # print('all parameters of model requires_grad')
     #request_dict = sort_datasets(cfg.DATASETS.NAMES[0])
     
     request_dict = defaultdict(list)
@@ -70,20 +70,21 @@ def GOAT(cfg,train_data_loader):
             if index % frequency ==0:
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
-            model.heads.MODE = 'C'
+            # model.heads.MODE = 'C'
             # zero the parameter gradients
             # adv_images = adv_images.clone().detach()
             # adv_images.requires_grad_()
+            model.heads.MODE = 'F'
             optimizer.zero_grad()
             outputs = model(adv_images)
-            #loss_dict = model.losses(outputs,labels)
-            #loss = sum(loss_dict.values())
-            # dist = pairwise_distance(outputs, outputs)
-            # dist_ap, dist_an, list_triplet = get_distances(dist, labels)
-            # y = torch.ones(dist_ap.size(0)).to(device)
-            # loss = criterion(dist_an, dist_ap, y)
-            loss = criterion(outputs,labels)
-            loss_total+=loss.item()
+            # loss_dict = model.losses(outputs,labels)
+            # loss = sum(loss_dict.values())
+            dist = pairwise_distance(outputs, outputs)
+            dist_ap, dist_an, list_triplet = get_distances(dist, labels)
+            y = torch.ones(dist_ap.size(0)).to(device)
+            loss = criterion(dist_an, dist_ap, y)
+            # loss = criterion(outputs,labels)
+            # loss_total+=loss.item()
                 
             loss.backward()
             optimizer.step()   

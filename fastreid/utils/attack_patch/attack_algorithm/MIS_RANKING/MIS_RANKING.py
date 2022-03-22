@@ -137,19 +137,35 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
     loss_func = msssim
     loss_G_ssim = (1-loss_func(imgs, new_imgs))*0.1
 
-    ############## Forward ###############
+
     loss_D = (loss_D_fake + loss_D_real)/2
     loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
+
     ############## Backward #############
-    # update generator weights
-    optimizer_G.zero_grad()
-    # loss_G.backward(retain_graph=True)
-    loss_G.backward()
-    optimizer_G.step()
     # update discriminator weights
     optimizer_D.zero_grad()
-    loss_D.backward()
+    loss_D.backward(retain_graph=True)
+   
+    # update generator weights
+    optimizer_G.zero_grad()
+    loss_G.backward()
+    #loss_G.backward()
     optimizer_D.step()
+    optimizer_G.step()
+
+    ############## Forward ###############
+    # loss_D = (loss_D_fake + loss_D_real)/2
+    # loss_G = loss_G_GAN + loss_G_ReID + loss_G_ssim
+    # ############## Backward #############
+    # # update generator weights
+    # optimizer_G.zero_grad()
+    # # loss_G.backward(retain_graph=True)
+    # loss_G.backward()
+    # optimizer_G.step()
+    # # update discriminator weights
+    # optimizer_D.zero_grad()
+    # loss_D.backward()
+    # optimizer_D.step()
     
 
     loss_G_total+=loss_G.item()
@@ -164,7 +180,7 @@ def train(cfg,epoch, G, D, model,criterionGAN, clf_criterion, metric_criterion, 
 def perturb(imgs, G, D, cfg,train_or_test='test'):
   n,c,h,w = imgs.size()
   delta = G(imgs)
-  #delta = L_norm(cfg,delta, train_or_test)
+  delta = L_norm(cfg,delta, train_or_test)
   new_imgs = torch.add(imgs.cuda(), delta[0:imgs.size(0)].cuda())
 
   _, mask = D(torch.cat((imgs, new_imgs.detach()), 1))
