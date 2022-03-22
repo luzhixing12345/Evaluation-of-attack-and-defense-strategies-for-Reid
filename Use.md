@@ -42,7 +42,6 @@
      - `GOAT`
      - `EST`
      - `SES`
-     - `PNP`
   - The second part,after training your defense model first time, you could use `:` to load the pretrained defense model
   
 Each result will be saved in an excel in the root path as `./result.xlsx`. Except long python terminal outputs, all your works will be recorded in file `./log.txt` with a short and clear notes, you don't need to worry about that `log.txt` will be recovered because all the notes would be written at the end of the file. **No argument**

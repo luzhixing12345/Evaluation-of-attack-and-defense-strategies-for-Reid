@@ -72,10 +72,8 @@ def GOAT(cfg,train_data_loader):
 
             # model.heads.MODE = 'C'
             # zero the parameter gradients
-            # adv_images = adv_images.clone().detach()
-            # adv_images.requires_grad_()
             model.heads.MODE = 'FC'
-            optimizer.zero_grad()
+            
             adv_images = adv_images.to(device)
             outputs = model(adv_images)
             loss = model.losses(outputs,labels)
@@ -86,7 +84,7 @@ def GOAT(cfg,train_data_loader):
             # loss = criterion(dist_an, dist_ap, y)
             # loss = criterion(outputs,labels)
             # loss_total+=loss.item()
-                
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()   
         eval_train(model,train_data_loader)
