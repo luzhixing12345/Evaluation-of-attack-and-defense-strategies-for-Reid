@@ -28,9 +28,9 @@ def GOAT(cfg,train_data_loader):
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.00035, weight_decay=5e-4)
 
     max_epoch = 2000
-    EPOCH = 3
+    EPOCH = 1
     frequency = 800
-    #criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
     #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
     # model.train()
@@ -70,20 +70,22 @@ def GOAT(cfg,train_data_loader):
             if index % frequency ==0:
                 print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
-            # model.heads.MODE = 'C'
+            model.heads.MODE = 'C'
             # zero the parameter gradients
-            model.heads.MODE = 'FC'
+            # model.heads.MODE = 'FC'
             
+            adv_images = adv_images.detach()
+            adv_images.requires_grad_()
             adv_images = adv_images.to(device)
             outputs = model(adv_images)
-            loss = model.losses(outputs,labels)
+            # loss = model.losses(outputs,labels)
             # loss = sum(loss_dict.values())
             # dist = pairwise_distance(outputs, outputs)
             # dist_ap, dist_an, list_triplet = get_distances(dist, labels)
             # y = torch.ones(dist_ap.size(0)).to(device)
             # loss = criterion(dist_an, dist_ap, y)
-            # loss = criterion(outputs,labels)
-            # loss_total+=loss.item()
+            loss = criterion(outputs,labels)
+            loss_total+=loss.item()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()   
