@@ -31,7 +31,7 @@ def GOAT(cfg,train_data_loader):
     EPOCH = 3
     frequency = 800
     #criterion = nn.CrossEntropyLoss()
-    criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
+    #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
     # model.train()
     # for _,parm in enumerate(model.parameters()):
@@ -74,15 +74,16 @@ def GOAT(cfg,train_data_loader):
             # zero the parameter gradients
             # adv_images = adv_images.clone().detach()
             # adv_images.requires_grad_()
-            model.heads.MODE = 'F'
+            model.heads.MODE = 'FC'
             optimizer.zero_grad()
+            adv_images = adv_images.to(device)
             outputs = model(adv_images)
-            # loss_dict = model.losses(outputs,labels)
+            loss = model.losses(outputs,labels)
             # loss = sum(loss_dict.values())
-            dist = pairwise_distance(outputs, outputs)
-            dist_ap, dist_an, list_triplet = get_distances(dist, labels)
-            y = torch.ones(dist_ap.size(0)).to(device)
-            loss = criterion(dist_an, dist_ap, y)
+            # dist = pairwise_distance(outputs, outputs)
+            # dist_ap, dist_an, list_triplet = get_distances(dist, labels)
+            # y = torch.ones(dist_ap.size(0)).to(device)
+            # loss = criterion(dist_an, dist_ap, y)
             # loss = criterion(outputs,labels)
             # loss_total+=loss.item()
                 

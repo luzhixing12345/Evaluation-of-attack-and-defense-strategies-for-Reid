@@ -70,7 +70,7 @@ def _train_loader_from_config(cfg, *, train_set=None, transforms=None, sampler=N
 
 @configurable(from_config=_train_loader_from_config)
 def build_reid_train_loader(
-        train_set, *, sampler=None, total_batch_size, num_workers=4,
+        train_set, *, sampler=None, total_batch_size, num_workers=0,
 ):
     """
     Build a dataloader for object re-identification with some default features.
