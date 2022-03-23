@@ -35,13 +35,12 @@ def distillation(cfg,train_data_loader):
                 break
             clean_data = data['images'].to(device)
             targets = data['targets'].to(device)
-        
-            optimizer.zero_grad()
+                    
             logits = model(clean_data)
-            
             loss = criterion(logits/T,targets)
             
             loss_total+=loss.item()
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         print('loss_total = ',loss_total)
@@ -71,11 +70,11 @@ def distillation(cfg,train_data_loader):
             clean_data = data['images'].to(device)
             targets = distillation_labels[batch_idx]
         
-            optimizer_dis.zero_grad()
             logits = model_dis(clean_data)
             loss = criterion(logits,targets)
-            
             loss_total+=loss.item()
+            
+            optimizer_dis.zero_grad()
             loss.backward()
             optimizer.step()
         eval_train(model_dis,train_data_loader)

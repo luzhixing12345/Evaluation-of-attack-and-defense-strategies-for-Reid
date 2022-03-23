@@ -99,6 +99,8 @@ class adversary_defense:
 
 
     def getAttackMethod(self):
+        if self.cfg.ATTACKMETHOD == 'FNA':
+            raise "FNA doesn't have advsary defense, use GOAT defense instead"
         #mse = nn.MSELoss(reduction='sum')
         loss_fn = nn.CrossEntropyLoss()
         def odfa(f1,f2):

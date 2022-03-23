@@ -16,7 +16,6 @@ def gradient_regulation(cfg,train_data_loader):
     
     cfg = DefaultTrainer.auto_scale_hyperparams(cfg,train_data_loader.dataset.num_classes)
     model = DefaultTrainer.build_model_main(cfg)  #启用baseline_for_defense
-    model.RESIZE = True
     Checkpointer(model).load(cfg.MODEL.WEIGHTS)  # load trained model
     model.to(device)
 
@@ -44,6 +43,7 @@ def gradient_regulation(cfg,train_data_loader):
             targets = data['targets'].to(device)
             
             clean_data = clean_data.requires_grad_()
+            
             optimizer.zero_grad()
             logits = model(clean_data)
             loss = loss_calcuation(logits,targets,clean_data) # weight的值还要好好选择一下
