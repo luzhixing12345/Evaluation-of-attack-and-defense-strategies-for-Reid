@@ -107,23 +107,27 @@ class MUAP:
 
 
         size,N,_,_,_ = images.shape
-        attack_img = Variable(torch.rand(size,3, 256, 128), requires_grad=True)*1e-6
-        attack_img = attack_img.to(device)
-        attack_img = attack_img.detach()
-        attack_img.requires_grad_()
         new_images = []
         for i in range(N):
-            img = images[:,i,:,:,:]
+            img = images[:,i,:,:,:].to(device)
             self.g = torch.tensor([0.])
             self.pre_sat = 1.
             
+            attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+            attack_img.to(device)
+            
+            loss = 0
             for epoch in range(self.EPOCH):
-                attack_img = Variable(attack_img, requires_grad=True)
-                median_img = torch.add(img,self.normalize_transform(attack_img).to('cuda')).to('cuda')   #mix attack img and clean img
                 
-                with torch.no_grad():
-                    feat = self.model(img)
-                    attack_feat = self.model(median_img)
+                attack_img = self.normalize_transform(attack_img)
+                attack_img = attack_img.detach()
+                attack_img.requires_grad_()
+      
+                median_img = torch.add(img,attack_img.to(device)).to(device)   #mix attack img and clean img
+                
+                
+                feat = self.model(img)
+                attack_feat = self.model(median_img)
             
                 map_loss = self.loss_fn1(attack_feat, feat, target, 5)
                 tvl_loss = self.loss_fn2(median_img)
@@ -133,9 +137,19 @@ class MUAP:
                 self.model.zero_grad()
 
                 attack_grad = attack_img.grad.data
+                
+                # beg for no bugs
                 attack_img, sat, self.g = attack_update(attack_img, attack_grad, self.pre_sat, self.g, self.scale_rate,epoch,self.radiu)
                 self.pre_sat = sat
+                
+                loss += total_loss
+                avg_loss = loss/(epoch+1)
 
+                if avg_loss < self.pre_loss:
+                    best_attack = attack_img
+                    self.pre_loss = avg_loss
+
+            img = torch.add(img,best_attack.to(device))
             new_images.append(img)
         
         new_images = torch.stack(new_images)
