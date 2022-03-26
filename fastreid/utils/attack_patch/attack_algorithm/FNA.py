@@ -28,23 +28,16 @@ class FNA:
             return self.GA(images,selected_features)
         return self.AttackMethod(images,selected_features)
 
-    def GA(self,selected_images,no_use):
+    def GA(self,selected_images,features):
         
         _,N,_,_,_ =selected_images.shape
-        new_images = []
-        selected_features = []
-
-        for i in range(N):
-            image = selected_images[:,i,:,:,:]
-            with torch.no_grad():
-                features = self.model(image)
-                selected_features.append(features)
-        selected_features = torch.stack(selected_features)
-        selected_features = selected_features.permute(1,0,2,3,4)
-
+        
+        new_features = [features,selected_images[:,-1,:,:,:]]
+        new_features = torch.stack(features,new_features)
+        
         for i in range(N-1):
             image = selected_images[:,i,:,:,:]
-            new_img = self.AttackMethod(image,selected_features)
+            new_img = self.AttackMethod(image,new_features)
             new_images.append(new_img)
         new_images = torch.stack(new_images)
         new_images = new_images.permute(1,0,2,3,4)
