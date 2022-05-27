@@ -1,12 +1,12 @@
-# How to use our framework
+# 如何使用我们的框架
 
-## Our framework includes three parts
+## 我们的框架包括三个部分
 
-- **Step1: train a Reid model which can do cross border pedestrian re-identification**
-- **Step2: attack the Reid model by using one of attack algorithm**
-- **Step3: defense the Reid model by using one of defense algorithm**
+- **Step1：训练一个可以进行跨境行人重新识别的 Reid 模型**
+- **Step2：使用一种攻击算法攻击 Reid 模型**
+- **Step3：使用一种防御算法防御 Reid 模型**
 
-## cmdline arguments
+## 命令行传参
 
 - `--config-file` (must):load base configuration information, including datasets/batch size/model structure selection.
  **Need one argument where the configuration file is**.

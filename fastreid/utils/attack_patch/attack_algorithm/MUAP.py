@@ -66,12 +66,11 @@ class MUAP:
         
         images = images.to(device)
         attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+        attack_img = self.normalize_transform(attack_img)
         attack_img.to(device)
         
         loss = 0
         for epoch in range(self.EPOCH):
-            
-            attack_img = self.normalize_transform(attack_img)
             attack_img = attack_img.detach()
             attack_img.requires_grad_()
 
@@ -114,12 +113,11 @@ class MUAP:
             self.pre_sat = 1.
             
             attack_img = Variable(torch.rand(3, 256, 128), requires_grad=True)*1e-6
+            attack_img = self.normalize_transform(attack_img)
             attack_img.to(device)
             
             loss = 0
             for epoch in range(self.EPOCH):
-                
-                attack_img = self.normalize_transform(attack_img)
                 attack_img = attack_img.detach()
                 attack_img.requires_grad_()
       

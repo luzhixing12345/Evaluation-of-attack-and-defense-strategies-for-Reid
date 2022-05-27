@@ -1,35 +1,12 @@
-Evaluation and Study of Attack and Defense Strategies for Pedestrian Re-identification
-===
+# Evaluation and Study of Attack and Defense Strategies for Pedestrian Re-identification
 
+## Introduction
 
-# Introduction:
+该项目是武汉大学计算机学院2021年国家级创新项目 "面向行人重识别的攻防测评及研究" 的代码仓库,用于评测目前主流的针对行人重识别领域的攻击/防御算法.
 
-This project is a national innovation project of the school of computer  science of Wuhan University in 2021. The project team consists of four members and our academic advisor.
+我们的代码基于[fastreid](https://github.com/JDAI-CV/fast-reid)进行二次开发扩展,在尽量保持源代码结构完整性的同时,重新设计了评估我们的目的的框架。
 
-Our code is developed and expanded for the second time based on [fastreid](https://github.com/JDAI-CV/fast-reid). While trying to maintain the structural integrity of the source code, we have redesigned the evaluation framework for our purpose.
-
-# Installation
-
-## Requirements
-
-
-- Linux or macOS with python ≥ 3.6
-- PyTorch ≥ 1.6
-- torchvision that matches the Pytorch installation. You can install them together at [pytorch.org](https://pytorch.org/) to make sure of this.
-- [yacs](https://github.com/rbgirshick/yacs)
-- Cython (optional to compile evaluation code)
-- tensorboard (needed for visualization): `pip install tensorboard`
-- gdown (for automatically downloading pre-train model)
-- sklearn
-- termcolor
-- tabulate
-- [faiss](https://github.com/facebookresearch/faiss) `pip install faiss-cpu`
-- openpyxl
-- scikit-image
-
-
-
-## Set up with Conda
+## Installation : Set up with Conda
 
 ```shell script
 conda create -n fastreid python=3.7
@@ -42,18 +19,43 @@ conda install scikit-image=0.15.0
 conda install -c conda-forge tensorboardx
 ```
 
-# Use:
+> 请务必使用 conda 下载 scikit-image=0.15.0版本,不要使用 pip install
 
-All detailed usage of the framework in [Use.md](Use.md)
+## Dataset
 
-Main issues you may encounter will be listed in [Issues.md](Issues.md). If it doesn't solve your problem, please leave your issue and I will reply as soon as possible.
+我们在Market1501和DukeMTMC两个数据集上测试了实验结果,关于数据集的下载和保存位置请参考[dataset](datasets/README.md)
 
-# pretrained model
+下载地址失效的话也可以下载我们上传的数据集
 
-You can use our framework to train a model yourself, or directly download our pretrained model to save your time
+- [Market1501](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/Market-1501-v15.09.15.zip)
+- [DukeMTMC](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/DukeMTMC-reID.zip)
 
-see more in [Model_zoo.md](Model_zoo.md)
+请下载数据集,解压后放到 `datasets/` 目录下
 
-# result
+## Use
 
-# Reference
+具体的使用方法详见 [Use.md](Use.md)
+
+您可能遇到的主要问题会在[Issues.md](Issues.md)中列出，如果没有解决您的问题，请留下您的问题，我会尽快回复。
+
+## pretrained model
+
+您可以使用我们的框架自己训练模型，也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md)
+
+## Visualization result
+
+## Reference
+
+## Contributor
+
+项目团队由四名成员和我们的学术导师组成
+
+- 指导老师: 梁超
+- 队长: 曾俊淇
+- 队员: 陆知行
+- 队员: 袁梦莹
+- 队员: 马晓雅
+
+## Conclusion
+
+笔者记: 如果感兴趣的话,可以看看这个项目背后的[故事](story.md)
