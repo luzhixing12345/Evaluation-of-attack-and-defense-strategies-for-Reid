@@ -4,7 +4,9 @@
 
 该项目是武汉大学计算机学院2021年国家级创新项目 "面向行人重识别的攻防测评及研究" 的代码仓库,用于评测目前主流的针对行人重识别领域的攻击/防御算法.
 
-我们的代码基于[fastreid](https://github.com/JDAI-CV/fast-reid)进行二次开发扩展,在尽量保持源代码结构完整性的同时,重新设计了评估我们的目的的框架。
+我们的代码基于[fastreid](https://github.com/JDAI-CV/fast-reid)进行二次开发扩展,在尽量保持源代码结构完整性的同时,重新设计了评估我们的目的的框架
+
+如果您尚不了解行人重识别以及fastreid框架,可以参考[博客]()
 
 ## Installation : Set up with Conda
 
@@ -38,7 +40,7 @@ conda install -c conda-forge tensorboardx
 
 您可能遇到的主要问题会在[Issues.md](Issues.md)中列出，如果没有解决您的问题，请留下您的问题，我会尽快回复。
 
-## pretrained model
+## Pretrained model
 
 您可以使用我们的框架自己训练模型，也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md)
 
@@ -58,4 +60,8 @@ conda install -c conda-forge tensorboardx
 
 ## Conclusion
 
-笔者记: 如果感兴趣的话,可以看看这个项目背后的[故事]()
+如何想要在本项目上做再次修改,我同样记录了针对完整的fastreid框架的修改内容,可以参考[博客]()
+
+如果对本项目感兴趣的话,可以看看这个项目背后的[故事]()
+
+再次感谢您对本项目的关注
