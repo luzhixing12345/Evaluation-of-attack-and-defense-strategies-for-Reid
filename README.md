@@ -58,4 +58,4 @@ conda install -c conda-forge tensorboardx
 
 ## Conclusion
 
-笔者记: 如果感兴趣的话,可以看看这个项目背后的[故事](story.md)
+笔者记: 如果感兴趣的话,可以看看这个项目背后的[故事]()
