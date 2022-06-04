@@ -10,7 +10,7 @@
 
 我们的代码基于[fastreid](https://github.com/JDAI-CV/fast-reid)进行二次开发扩展,在尽量保持源代码结构完整性的同时,重新设计了评估我们的目的的框架
 
-如果您尚不了解行人重识别以及fastreid框架,可以参考[博客]()
+如果您尚不了解行人重识别以及fastreid框架,可以参考[博客]() # todo
 
 ## Installation : Set up with Conda
 
@@ -77,8 +77,8 @@ Made with [contrib.rocks](https://contrib.rocks).
 
 ## Conclusion
 
-如何想要在本项目上做再次修改,我同样记录了针对完整的fastreid框架的修改内容,可以参考[博客]()
+如何想要在本项目上做再次修改,我同样记录了针对完整的fastreid框架的修改内容,可以参考[博客]() #TODO
 
-如果对本项目感兴趣的话,可以看看这个项目背后的[故事]()
+如果对本项目感兴趣的话,可以看看这个项目背后的[故事]() #TODO
 
 再次感谢您对本项目的关注
