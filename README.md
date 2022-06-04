@@ -1,5 +1,9 @@
 # Evaluation and Study of Attack and Defense Strategies for Pedestrian Re-identification
 
+[![GitHub license](https://img.shields.io/github/license/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid)](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/blob/master/LICENSE)
+![Language](https://img.shields.io/badge/python-3.7-blue.svg)
+![GitHub last commit](https://img.shields.io/github/last-commit/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid)
+
 ## Introduction
 
 该项目是武汉大学计算机学院2021年国家级创新项目 "面向行人重识别的攻防测评及研究" 的代码仓库,用于评测目前主流的针对行人重识别领域的攻击/防御算法.
@@ -48,6 +52,13 @@ conda install -c conda-forge tensorboardx
 
 ## Reference
 
+|paper|github|
+|:--:|:--:|
+|Adversarial Metric Attack and Defense for Person Re-identification|https://github.com/SongBaiHust/Adversarial_Metric_Attack|
+|Vulnerability of Person Re-Identification Models to Metric Adversarial Attacks|https://github.com/qbouniot/adv-reid|
+|Transferable Controllable and Inconspicuous Adversarial Attacks on Person Re-identification|https://github.com/whj363636/Adversarial-attack-on-Person-ReID-With-Deep-Mis-Ranking|
+|Adversarial Ranking Attack and Defense|https://github.com/cdluminate/robrank|
+
 ## Contributor
 
 项目团队由四名成员和我们的学术导师组成
@@ -57,6 +68,12 @@ conda install -c conda-forge tensorboardx
 - 队员: 陆知行
 - 队员: 袁梦莹
 - 队员: 马晓雅
+
+<a href="https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks).
 
 ## Conclusion
 
