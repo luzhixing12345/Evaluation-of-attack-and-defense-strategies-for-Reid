@@ -20,7 +20,7 @@
    python3 tools/train_net.py --config-file configs/Market1501/bagtricks_R50.yml --train
    ```
 
-   初次训练大概会花费您一段时间,当然可以在这里找到我们所有预训练的[模型](Model_zoo.md)
+   初次训练大概会花费您一段时间,当然可以在这里找到我们所有预训练的[模型](Model_zoo.md) #todo
 
 2. 接下来我们对于这个模型进行攻击
 

@@ -46,7 +46,7 @@ conda install -c conda-forge tensorboardx
 
 ## Pretrained model
 
-您可以使用我们的框架自己训练模型，也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md)
+您可以使用我们的框架自己训练模型，也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md) #Todo
 
 ## Visualization result
 
@@ -58,6 +58,8 @@ conda install -c conda-forge tensorboardx
 |Vulnerability of Person Re-Identification Models to Metric Adversarial Attacks|https://github.com/qbouniot/adv-reid|
 |Transferable Controllable and Inconspicuous Adversarial Attacks on Person Re-identification|https://github.com/whj363636/Adversarial-attack-on-Person-ReID-With-Deep-Mis-Ranking|
 |Adversarial Ranking Attack and Defense|https://github.com/cdluminate/robrank|
+
+[相关论文搜集整理](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.0/reid-paper.xlsx)
 
 ## Contributor
 
@@ -74,6 +76,12 @@ conda install -c conda-forge tensorboardx
 </a>
 
 Made with [contrib.rocks](https://contrib.rocks).
+
+## Result
+
+我们在两种模型,两个数据集上分别交叉评估了攻击算法和防御算法针对Reid模型的rank指标影响,由于不同攻击防御算法仅仅依靠rank影响并不能合理衡量效果强弱,我们也提出了新的评价指标用于衡量攻击算法/防御算法强度
+
+所有的实验结果参见[ALL.xlsx](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.0/ALL.xlsx)
 
 ## Conclusion
 
