@@ -77,11 +77,12 @@ conda install -c conda-forge tensorboardx
 
 Made with [contrib.rocks](https://contrib.rocks).
 
-## Result
+<!-- ## Result
 
-我们在两种模型,两个数据集上分别交叉评估了攻击算法和防御算法针对Reid模型的rank指标影响,由于不同攻击防御算法仅仅依靠rank影响并不能合理衡量效果强弱,我们也提出了新的评价指标用于衡量攻击算法/防御算法强度
+我们在两种模型,两个数据集上分别交叉评估了攻击算法和防御算法针对Reid模型的rank指标影响,由于不同攻击防御算法仅仅依靠rank影响并不能合理衡量效果强弱,我们也提出了新的评价指标用于衡量攻击算法/防御算法强度 -->
 
-所有的实验结果参见[ALL.xlsx](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.0/ALL.xlsx)
+<!-- 所有的实验结果参见[ALL.xlsx](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.0/ALL.xlsx) -->
+
 
 ## Conclusion
 
