@@ -13,8 +13,10 @@ device='cuda'
 class adversary_defense:
     '''
     There are two ways to do adversary defense, one way is to split the training set into query/gallery and 
-    attack them as usual, the other way is to just use the key point of each attack algorithm to generate 
+    attack them as usual, the other way is to just use the attack principle of each attack algorithm to generate 
     the adv_image, my solution is the second way.
+    
+    use QA- method to do defense part
     '''
     def __init__(self,cfg) -> None:
         self.cfg = cfg

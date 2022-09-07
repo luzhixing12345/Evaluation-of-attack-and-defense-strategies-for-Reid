@@ -10,9 +10,7 @@
 
 我们的代码基于[fastreid](https://github.com/JDAI-CV/fast-reid)进行二次开发扩展,在尽量保持源代码结构完整性的同时,重新设计了评估我们的目的的框架
 
-如果您尚不了解行人重识别以及fastreid框架,可以参考[博客]() # todo
-
-## Installation : Set up with Conda
+## Requirements : Set up with Conda
 
 ```shell script
 conda create -n fastreid python=3.7
@@ -31,22 +29,30 @@ conda install -c conda-forge tensorboardx
 
 我们在Market1501和DukeMTMC两个数据集上测试了实验结果,关于数据集的下载和保存位置请参考[dataset](datasets/README.md)
 
-下载地址失效的话也可以下载我们上传的数据集
-
-- [Market1501](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/Market-1501-v15.09.15.zip)
-- [DukeMTMC](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/DukeMTMC-reID.zip)
+>原下载地址失效请使用已上传的数据集
+>
+>> - [Market1501](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/Market-1501-v15.09.15.zip)
+>> - [DukeMTMC](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.2/DukeMTMC-reID.zip)
 
 请下载数据集,解压后放到 `datasets/` 目录下
+
+```bash
+- datasets
+  - Market-1501-v15.09.15
+  - DukeMTMC-reID
+```
 
 ## Use
 
 具体的使用方法详见 [Use.md](Use.md)
 
-您可能遇到的主要问题会在[Issues.md](Issues.md)中列出，如果没有解决您的问题，请留下您的问题，我会尽快回复。
+您可能遇到的主要问题会在[Issues.md](Issues.md)中列出,如果没有解决您的问题,请留下您的问题,我会尽快回复
+
+关于整体框架的实现方式和修改部分请参考[CHANGELOG](CHANGELOG.md)
 
 ## Pretrained model
 
-您可以使用我们的框架自己训练模型，也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md) #Todo
+您可以使用我们的框架自己训练模型,也可以直接下载我们的预训练模型以节省您的时间,详见[Model_zoo.md](Model_zoo.md) #Todo
 
 ## Visualization result
 
@@ -71,23 +77,14 @@ conda install -c conda-forge tensorboardx
 - 队员: 袁梦莹
 - 队员: 马晓雅
 
-<a href="https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/graphs/contributors">
+<!-- <a href="https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid" />
 </a>
 
-Made with [contrib.rocks](https://contrib.rocks).
+Made with [contrib.rocks](https://contrib.rocks). -->
 
 <!-- ## Result
 
 我们在两种模型,两个数据集上分别交叉评估了攻击算法和防御算法针对Reid模型的rank指标影响,由于不同攻击防御算法仅仅依靠rank影响并不能合理衡量效果强弱,我们也提出了新的评价指标用于衡量攻击算法/防御算法强度 -->
 
 <!-- 所有的实验结果参见[ALL.xlsx](https://github.com/luzhixing12345/Evaluation-of-attack-and-defense-strategies-for-Reid/releases/download/v0.0.0/ALL.xlsx) -->
-
-
-## Conclusion
-
-如何想要在本项目上做再次修改,我同样记录了针对完整的fastreid框架的修改内容,可以参考[博客]() #TODO
-
-如果对本项目感兴趣的话,可以看看这个项目背后的[故事]() #TODO
-
-再次感谢您对本项目的关注

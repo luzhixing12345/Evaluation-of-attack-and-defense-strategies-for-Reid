@@ -46,10 +46,6 @@
 
 5. 接下来你可以查看生成的 `result.xlsx` 文件,里面有这次任务保存的结果
 
-```bash
-python3 tools/train_net.py --config-file ./configs/DukeMTMC/bagtricks_R50.yml --attack QA-:FGSM 
-```
-
 如果您想要完整的了解如何使用我们的全部内容,希望您可以有耐心的看完下方冗长的命令行可选参数.我们也在最后提供了一些具体的例子,帮助您理解如何使用
 
 ## 命令行传参

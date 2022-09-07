@@ -27,11 +27,11 @@ def GOAT(cfg,train_data_loader):
     optimizer = DefaultTrainer.build_optimizer(cfg, model)
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.00035, weight_decay=5e-4)
 
-    max_epoch = 2000
-    EPOCH = 1
+    max_epoch = 5000
+    EPOCH = 3
     frequency = 800
-    criterion = nn.CrossEntropyLoss()
-    #criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
+    # criterion = nn.CrossEntropyLoss()
+    # criterion = nn.MarginRankingLoss(margin=10, reduction='mean')
     
     # model.train()
     # for _,parm in enumerate(model.parameters()):
@@ -65,26 +65,26 @@ def GOAT(cfg,train_data_loader):
             inputs_clean = data['images'].to(device)
             labels = data['targets'].to(device)       
                 
-            model.heads.MODE = 'F'
-            adv_images = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
-            if index % frequency ==0:
-                print('ssim = ',eval_ssim(inputs_clean,adv_images))
+            # model.heads.MODE = 'F'
+            # adv_images = create_adv_batch(model,inputs_clean,labels.cpu(),request_dict)
+            # if index % frequency ==0:
+                # print('ssim = ',eval_ssim(inputs_clean,adv_images))
 
-            model.heads.MODE = 'C'
+            # model.heads.MODE = 'C'
             # zero the parameter gradients
-            # model.heads.MODE = 'FC'
+            model.heads.MODE = 'FC'
             
-            adv_images = adv_images.detach()
-            adv_images.requires_grad_()
-            adv_images = adv_images.to(device)
+            # adv_images = adv_images.detach()
+            # adv_images.requires_grad_()
+            # adv_images = adv_images.to(device)
+            adv_images = inputs_clean
             outputs = model(adv_images)
-            # loss = model.losses(outputs,labels)
-            # loss = sum(loss_dict.values())
+            loss = model.losses(outputs,labels)
             # dist = pairwise_distance(outputs, outputs)
             # dist_ap, dist_an, list_triplet = get_distances(dist, labels)
             # y = torch.ones(dist_ap.size(0)).to(device)
             # loss = criterion(dist_an, dist_ap, y)
-            loss = criterion(outputs,labels)
+            # loss = criterion(outputs,labels)
             loss_total+=loss.item()
             optimizer.zero_grad()
             loss.backward()
@@ -176,7 +176,7 @@ def create_adv_batch(model,inputs,labels,request_dict,rand_r=True,pull=True,nb_r
             criterion = sum_dif_mse
         requests = requests.to(device)
 
-    attack = PGDAttack(lambda x: model(x), criterion, eps=5/255, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
+    attack = PGDAttack(lambda x: model(x), criterion, eps=1/255, nb_iter=7, eps_iter=1.0/255.0, ord=np.inf,rand_init=True)
     data_adv = attack.perturb(inputs, requests)
     return data_adv
 

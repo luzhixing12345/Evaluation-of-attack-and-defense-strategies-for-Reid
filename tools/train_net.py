@@ -36,6 +36,7 @@ def main(args):
     cfg = setup(args)
     
     if args.train:
+        # only train the model and then return
         trainer = DefaultTrainer(cfg)
         trainer.resume_or_load(resume=args.resume)
         trainer.train()
@@ -57,7 +58,9 @@ def main(args):
     pure_result=None
     att_result=None
     def_result=None
-    def_adv_result=None  
+    def_adv_result=None
+    
+    # SSIM & def_SSIM are two evaluation indicators for image similarity
     SSIM=None
     def_SSIM = None
     
@@ -67,15 +70,19 @@ def main(args):
     # _C.MODEL.DEFENSE_TRAINED_WEIGHT = "./model/def_trained.pth"       the model that can defense well towards the attack method
 
 
+    # Dataset information :
+    #
     # market1501  pic    target                  DukeMTMC   pic     target
     # query      3368    750                     query      2228    702
     # gallery   15913    751                     gallery    17661   1110
     # train     12936                            train      16522   702
     
     if not cfg.ONLYDEFENSE:
+        # if only defense, we just test use the pretrained defense model testing in pure datasets
         pure_result = get_result(cfg,cfg.MODEL.WEIGHTS,'pure')
     
     if args.attack and not cfg.ONLYDEFENSE:
+        # attack 
         print_info('start attack')
         AttackProcess = attack(cfg)
         AttackProcess.start_attack()
